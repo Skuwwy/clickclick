@@ -18,12 +18,14 @@ import sys
 from typing import Optional, Tuple
 
 # Import configuration constants
-from config import CONSOLE_OUTPUT_ENABLED
+from .config import CONSOLE_OUTPUT_ENABLED
 
-from mouse_controller import MouseController
-from click_scheduler import ClickScheduler
-from hotkey_handler import HotkeyHandler
-from status_indicator import StatusIndicator
+from .mouse_controller import MouseController
+from .click_scheduler import ClickScheduler
+from .hotkey_handler import HotkeyHandler
+from .status_indicator import StatusIndicator
+from .config import MIN_CLICK_DELAY, MAX_CLICK_DELAY, POSITION_OFFSET_RANGE
+from .gui_window import GUIWindow
 
 
 class ClickClickApp:
@@ -58,8 +60,12 @@ class ClickClickApp:
         # Initialize application components
         self.mouse_controller = MouseController()
         self.click_scheduler = ClickScheduler(self.mouse_controller)
-        self.status_indicator = StatusIndicator()
+        # Status indicator overlay with restore callback
+        self.status_indicator = StatusIndicator(on_click=self._restore_main_window)
         self.hotkey_handler = HotkeyHandler(self.toggle_clicking)
+        # GUI control window attached to indicator's root if available
+        parent_root = self.status_indicator.root if self.status_indicator.root is not None else None
+        self.gui = GUIWindow(self, parent_root=parent_root)
 
     def toggle_clicking(self) -> None:
         """
@@ -81,6 +87,8 @@ class ClickClickApp:
 
                 # Update indicator to active state
                 self.status_indicator.show_active()
+                # Update GUI status
+                self.gui.update_status(True, self.locked_position)
                 self.is_active = True
             except Exception:
                 # Rollback on failure while remaining silent
@@ -94,6 +102,10 @@ class ClickClickApp:
                     pass
                 try:
                     self.status_indicator.show_inactive()
+                except Exception:
+                    pass
+                try:
+                    self.gui.update_status(False, None)
                 except Exception:
                     pass
                 self.locked_position = None
@@ -118,6 +130,10 @@ class ClickClickApp:
                 self.status_indicator.show_inactive()
             except Exception:
                 pass
+            try:
+                self.gui.update_status(False, None)
+            except Exception:
+                pass
             self.is_active = False
 
     def run(self) -> None:
@@ -139,7 +155,7 @@ class ClickClickApp:
             # Set up signal handler for Ctrl+C
             signal.signal(signal.SIGINT, self._signal_handler)
 
-            # Enter main GUI event loop
+            # Enter main GUI event loop via shared root
             if self.status_indicator.root is not None:
                 self.status_indicator.root.mainloop()
         except KeyboardInterrupt:
@@ -158,6 +174,8 @@ class ClickClickApp:
         Ensures scheduler, hotkey handler, and indicator are stopped/destroyed.
         Handles exceptions silently per project requirements.
         """
+        if CONSOLE_OUTPUT_ENABLED:
+            print("[DEBUG] cleanup() called - starting application shutdown")
         try:
             if self.is_active:
                 try:
@@ -166,12 +184,24 @@ class ClickClickApp:
                     pass
 
             try:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Stopping hotkey handler...")
                 self.hotkey_handler.stop()
-            except Exception:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Hotkey handler stopped")
+            except Exception as e:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print(f"[DEBUG] Error stopping hotkey handler: {e}")
                 pass
 
             try:
                 self.status_indicator.destroy()
+            except Exception:
+                pass
+            try:
+                # Attempt to destroy GUI window if separate
+                if getattr(self.gui, 'window', None) is not None:
+                    self.gui.window.destroy()
             except Exception:
                 pass
         except Exception as e:
@@ -179,6 +209,15 @@ class ClickClickApp:
                 print(f"Cleanup error: {e}")
         finally:
             self.running = False
+            if CONSOLE_OUTPUT_ENABLED:
+                print("[DEBUG] Calling sys.exit(0) to terminate process")
+            try:
+                # Ensure full process exit when cleanup requested from GUI close
+                sys.exit(0)
+            except SystemExit:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] SystemExit raised - process should terminate")
+                pass
 
     def _signal_handler(self, signum, frame) -> None:
         """
@@ -209,6 +248,53 @@ class ClickClickApp:
             'locked_position': self.locked_position,
             'running': self.running
         }
+
+    # GUI integration helpers
+    def _restore_main_window(self) -> None:
+        """
+        Callback for status indicator click to restore GUI window.
+        """
+        try:
+            self.gui.restore_window()
+        except Exception:
+            pass
+
+    def _on_close_window(self) -> None:
+        """
+        Close callback from GUI window: exit the app entirely.
+        """
+        try:
+            self.cleanup()
+        except Exception:
+            pass
+
+    def update_delay_range(self, min_delay: float, max_delay: float) -> None:
+        """
+        Called by GUI when delay settings change.
+        """
+        try:
+            self.click_scheduler.set_delay_range(min_delay, max_delay)
+            # If currently active, restart scheduler to adopt changes immediately
+            if self.is_active:
+                try:
+                    self.click_scheduler.stop()
+                except Exception:
+                    pass
+                try:
+                    self.click_scheduler.start()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def update_offset_range(self, rng: int) -> None:
+        """
+        Called by GUI when offset settings change.
+        """
+        try:
+            self.mouse_controller.set_offset_range(rng)
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

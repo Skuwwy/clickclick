@@ -8,10 +8,10 @@ based on whether the auto-clicker is active or inactive.
 """
 
 import tkinter as tk
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 
 # Import configuration constants
-from config import (
+from .config import (
     INDICATOR_SIZE, INDICATOR_POSITION, INDICATOR_COLOR_ACTIVE,
     INDICATOR_COLOR_INACTIVE, INDICATOR_OPACITY, INDICATOR_MARGIN
 )
@@ -38,7 +38,7 @@ class StatusIndicator:
     TODO: Use Canvas for circular drawing with color changes
     """
 
-    def __init__(self) -> None:
+    def __init__(self, on_click: Optional[Callable[[], None]] = None) -> None:
         """
         Initialize the status indicator GUI.
         
@@ -48,10 +48,12 @@ class StatusIndicator:
         self.root: Optional[tk.Tk] = tk.Tk()
         self.canvas: Optional[tk.Canvas] = None
         self.circle_id: Optional[int] = None
+        self._on_click_cb = on_click
 
         # Configure window and create the indicator
         self._setup_window()
         self._create_canvas()
+        self._bind_click()
 
     def show_active(self) -> None:
         """
@@ -85,6 +87,25 @@ class StatusIndicator:
                 self.root = None
                 self.canvas = None
                 self.circle_id = None
+
+    def _bind_click(self) -> None:
+        """
+        Bind mouse click on the indicator to callback to restore the main window.
+        """
+        if self.root is None or self.canvas is None:
+            return
+        try:
+            def handle_click(event=None):
+                try:
+                    if callable(self._on_click_cb):
+                        self._on_click_cb()
+                except Exception:
+                    pass
+            # Bind both left click on canvas and entire window
+            self.canvas.bind("<Button-1>", handle_click)
+            self.root.bind("<Button-1>", handle_click)
+        except Exception:
+            pass
 
     def _calculate_position(self) -> Tuple[int, int]:
         """

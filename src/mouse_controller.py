@@ -11,7 +11,7 @@ import random
 from typing import Optional, Tuple
 
 # Import configuration constants
-from config import POSITION_OFFSET_RANGE, CONSOLE_OUTPUT_ENABLED
+from .config import POSITION_OFFSET_RANGE, CONSOLE_OUTPUT_ENABLED
 
 # Import pyautogui for mouse control
 import pyautogui
@@ -35,6 +35,8 @@ class MouseController:
         is currently locked for clicking.
         """
         self.locked_position: Optional[Tuple[int, int]] = None
+        # Runtime-adjustable offset range (defaults to config)
+        self.offset_range: int = POSITION_OFFSET_RANGE
         
         # PyAutoGUI configuration (fail-safe settings)
         # Fail-safe allows moving the mouse to a corner to abort operations
@@ -114,6 +116,18 @@ class MouseController:
                 print(f"Click execution error: {e}")
 
 
+    def set_offset_range(self, value: int) -> None:
+        """
+        Update the position offset range used for randomization.
+
+        Clamps the value to a reasonable range [0, 50].
+        """
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            return
+        self.offset_range = max(0, min(50, v))
+
     def _get_random_offset(self) -> Tuple[int, int]:
         """
         Calculate random offset within the configured position range.
@@ -124,6 +138,7 @@ class MouseController:
         Returns:
             Tuple[int, int]: Random offset coordinates
         """
-        offset_x = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
-        offset_y = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
+        rng = int(self.offset_range)
+        offset_x = random.randint(-rng, rng)
+        offset_y = random.randint(-rng, rng)
         return (offset_x, offset_y)

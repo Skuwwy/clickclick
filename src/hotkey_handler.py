@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from pynput.keyboard import Key, Listener, KeyCode
 
 # Import configuration
-from config import TOGGLE_HOTKEY, CONSOLE_OUTPUT_ENABLED
+from .config import TOGGLE_HOTKEY, CONSOLE_OUTPUT_ENABLED
 
 
 class HotkeyHandler:
@@ -42,6 +42,17 @@ class HotkeyHandler:
 
         self.toggle_callback: Callable[[], None] = toggle_callback
 
+        # Hotkey matching configuration (runtime adjustable)
+        # Prefer virtual key code when available (Windows Numpad5 = 101)
+        self._hotkey_vk: Optional[int] = None
+        self._hotkey_char: Optional[str] = None
+        self._hotkey_name: Optional[str] = None
+
+        # Map default TOGGLE_HOTKEY to a sensible default
+        # Current default: 'num_5' => VK 101 on Windows
+        if isinstance(TOGGLE_HOTKEY, str) and TOGGLE_HOTKEY.lower() in {"num_5", "numpad5", "numpad_5"}:
+            self._hotkey_vk = 101
+
         # Initialize pynput keyboard listener, but do not start yet
         # Use _on_press as the callback for key press events
         self._listener: Optional[Listener] = Listener(on_press=self._on_press)
@@ -66,9 +77,7 @@ class HotkeyHandler:
             if not getattr(self._listener, "running", False):
                 self._listener.start()
                 if CONSOLE_OUTPUT_ENABLED:
-                    print(f"[DEBUG] Hotkey listener started. Configured hotkey: {TOGGLE_HOTKEY}")
-                    print(f"[DEBUG] Checking for Key enum value: Key.num_5")
-                    print(f"[DEBUG] Press Numpad 5 to see key detection...")
+                    print(f"[DEBUG] Hotkey listener started. Configured hotkey vk={self._hotkey_vk} char={self._hotkey_char} name={self._hotkey_name}")
         except Exception as e:
             # Prevent any startup errors from crashing the application
             if CONSOLE_OUTPUT_ENABLED:
@@ -81,19 +90,57 @@ class HotkeyHandler:
 
         Ensures a clean shutdown of the listener thread.
         """
+        if CONSOLE_OUTPUT_ENABLED:
+            print("[DEBUG] HotkeyHandler.stop() called")
+        
         if self._listener is not None:
             try:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Calling listener.stop()...")
                 self._listener.stop()
+                
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Attempting to join listener thread with 0.5s timeout...")
                 # Attempt to join briefly for clean shutdown; ignore if unsupported
                 try:
                     self._listener.join(timeout=0.5)
-                except Exception:
+                    if CONSOLE_OUTPUT_ENABLED:
+                        print("[DEBUG] Listener thread joined successfully")
+                except Exception as e:
+                    if CONSOLE_OUTPUT_ENABLED:
+                        print(f"[DEBUG] Exception during listener.join(): {e}")
                     pass
-            except Exception:
+            except Exception as e:
                 # Prevent shutdown errors from bubbling up
+                if CONSOLE_OUTPUT_ENABLED:
+                    print(f"[DEBUG] Exception during listener.stop(): {e}")
                 pass
             finally:
                 self._listener = None
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Listener set to None")
+
+    def set_hotkey(self, vk: Optional[int] = None, char: Optional[str] = None, name: Optional[str] = None) -> None:
+        """
+        Update the hotkey matching configuration.
+
+        Args:
+            vk: Virtual key code (int, e.g., 101 for Numpad 5 on Windows)
+            char: Single character to match (e.g., 'x')
+            name: String form of Key enum (e.g., 'Key.f8')
+        """
+        try:
+            self._hotkey_vk = int(vk) if vk is not None else None
+        except (TypeError, ValueError):
+            self._hotkey_vk = None
+        if isinstance(char, str) and len(char) == 1:
+            self._hotkey_char = char
+        else:
+            self._hotkey_char = None
+        if isinstance(name, str) and name.startswith("Key."):
+            self._hotkey_name = name
+        else:
+            self._hotkey_name = None
 
     def _on_press(self, key) -> None:
         """
@@ -115,25 +162,31 @@ class HotkeyHandler:
                 if hasattr(key, 'char'):
                     print(f"[DEBUG]   Char: {key.char}")
             
-            # Check for Numpad 5 key
-            # Numpad 5 with NumLock ON sends KeyCode with vk=101 on Windows
-            # We check for KeyCode type and the specific virtual key code
+            # Match order: vk -> char -> name
             is_hotkey_match = False
-            
+
             if isinstance(key, KeyCode):
-                # Numpad 5 with NumLock ON has virtual key code 101 (VK_NUMPAD5)
-                if key.vk == 101:
+                # Prefer virtual key code when present
+                if self._hotkey_vk is not None and hasattr(key, 'vk') and key.vk == self._hotkey_vk:
                     is_hotkey_match = True
-                    if CONSOLE_OUTPUT_ENABLED:
-                        print(f"[DEBUG] HOTKEY MATCHED! (KeyCode vk=101 - Numpad 5)")
-            
+                elif self._hotkey_char is not None and getattr(key, 'char', None):
+                    try:
+                        if str(key.char).lower() == str(self._hotkey_char).lower():
+                            is_hotkey_match = True
+                    except Exception:
+                        pass
+            else:
+                # pynput Key enum
+                if self._hotkey_name is not None:
+                    if str(key) == self._hotkey_name:
+                        is_hotkey_match = True
+
             if is_hotkey_match:
                 if CONSOLE_OUTPUT_ENABLED:
-                    print("[DEBUG] Calling toggle_callback()")
+                    print("[DEBUG] Hotkey matched. Calling toggle_callback().")
                 self.toggle_callback()
             elif CONSOLE_OUTPUT_ENABLED:
-                print(f"[DEBUG] No match (expected Numpad 5 with vk=101)")
-                print()
+                pass
                 
         except AttributeError as e:
             # Some special keys may raise AttributeError; prevent listener crash
