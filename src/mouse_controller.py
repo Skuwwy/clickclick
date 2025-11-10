@@ -10,9 +10,11 @@ This module handles all mouse-related operations including:
 import random
 from typing import Optional, Tuple
 
-# TODO: Import pyautogui in Phase 3 implementation
-# import pyautogui
-# from config import CONSOLE_OUTPUT_ENABLED
+# Import configuration constants
+from config import POSITION_OFFSET_RANGE, CONSOLE_OUTPUT_ENABLED
+
+# Import pyautogui for mouse control
+import pyautogui
 
 
 class MouseController:
@@ -34,9 +36,15 @@ class MouseController:
         """
         self.locked_position: Optional[Tuple[int, int]] = None
         
-        # TODO: In Phase 3 implementation, add:
-        # - PyAutoGUI configuration (fail-safe settings)
-        # - Platform-specific settings if needed
+        # PyAutoGUI configuration (fail-safe settings)
+        # Fail-safe allows moving the mouse to a corner to abort operations
+        try:
+            pyautogui.FAILSAFE = True
+        except Exception:
+            # Keep silent to avoid crashing in environments where pyautogui
+            # configuration may not be available.
+            if CONSOLE_OUTPUT_ENABLED:
+                print("PyAutoGUI fail-safe configuration could not be set")
 
     def lock_current_position(self) -> None:
         """
@@ -44,15 +52,23 @@ class MouseController:
         
         This method should be called when the auto-clicker is activated
         to capture the position where clicks should be performed.
-        
-        TODO: Implement using pyautogui.position() to get current coordinates
-        TODO: Store the position tuple (x, y) in self.locked_position
-        TODO: Add console output if CONSOLE_OUTPUT_ENABLED is True
         """
-        # TODO: Remove this placeholder when implementing
-        if True:  # Placeholder for implementation
-            self.locked_position = (100, 100)  # Placeholder coordinates
-
+        try:
+            pos = pyautogui.position()
+            # Support both Point-like objects and tuples
+            if hasattr(pos, "x") and hasattr(pos, "y"):
+                x = int(pos.x)
+                y = int(pos.y)
+            else:
+                x = int(pos[0])
+                y = int(pos[1])
+            self.locked_position = (x, y)
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Locked mouse position at ({x}, {y})")
+        except Exception as e:
+            # Silent failure per requirements
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Failed to lock mouse position: {e}")
     def unlock_position(self) -> None:
         """
         Clear the locked mouse position.
@@ -60,7 +76,13 @@ class MouseController:
         This method should be called when the auto-clicker is deactivated
         to release the position lock.
         """
+        prev = self.locked_position
         self.locked_position = None
+        if CONSOLE_OUTPUT_ENABLED:
+            if prev is not None:
+                print(f"Unlocked mouse position from {prev}")
+            else:
+                print("Unlock requested but no position was locked")
 
     def click_at_locked_position(self) -> None:
         """
@@ -71,22 +93,26 @@ class MouseController:
         2. Calculate a random offset within the configured range
         3. Execute a click at the offset position using PyAutoGUI
         4. Handle errors gracefully with silent failure
-        
-        TODO: Implement using _get_random_offset() and pyautogui.click()
-        TODO: Wrap in try-except for silent error handling
-        TODO: Add console output if CONSOLE_OUTPUT_ENABLED is True
         """
         if self.locked_position is None:
             return
-            
-        # TODO: Remove this placeholder when implementing
-        # Calculate offset
-        # offset_x, offset_y = self._get_random_offset()
-        # target_x = self.locked_position[0] + offset_x
-        # target_y = self.locked_position[1] + offset_y
         
-        # TODO: Execute click (placeholder)
-        pass
+        try:
+            # Calculate offset and target position
+            offset_x, offset_y = self._get_random_offset()
+            target_x = int(self.locked_position[0] + offset_x)
+            target_y = int(self.locked_position[1] + offset_y)
+            
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Clicking at ({target_x}, {target_y}) with offset ({offset_x}, {offset_y})")
+            
+            # Execute the click
+            pyautogui.click(x=target_x, y=target_y)
+        except Exception as e:
+            # Silent failure per requirements
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Click execution error: {e}")
+
 
     def _get_random_offset(self) -> Tuple[int, int]:
         """
@@ -97,14 +123,7 @@ class MouseController:
         
         Returns:
             Tuple[int, int]: Random offset coordinates
-            
-        TODO: Implement using random.randint() to generate offsets
-        TODO: Import POSITION_OFFSET_RANGE from config module
         """
-        # TODO: Remove this placeholder when implementing
-        return (0, 0)  # Placeholder return value
-        
-        # TODO: Implement actual offset generation:
-        # offset_x = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
-        # offset_y = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
-        # return (offset_x, offset_y)
+        offset_x = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
+        offset_y = random.randint(-POSITION_OFFSET_RANGE, POSITION_OFFSET_RANGE)
+        return (offset_x, offset_y)

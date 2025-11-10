@@ -15,14 +15,15 @@ The main application class is responsible for:
 
 import signal
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 
-# TODO: Import all application components in Phase 7 implementation
-# from config import CONSOLE_OUTPUT_ENABLED
-# from mouse_controller import MouseController
-# from click_scheduler import ClickScheduler
-# from hotkey_handler import HotkeyHandler
-# from status_indicator import StatusIndicator
+# Import configuration constants
+from config import CONSOLE_OUTPUT_ENABLED
+
+from mouse_controller import MouseController
+from click_scheduler import ClickScheduler
+from hotkey_handler import HotkeyHandler
+from status_indicator import StatusIndicator
 
 
 class ClickClickApp:
@@ -51,144 +52,133 @@ class ClickClickApp:
         """
         # Application state
         self.is_active: bool = False
-        self.locked_position: Optional[tuple] = None
+        self.locked_position: Optional[Tuple[int, int]] = None
         self.running: bool = True
-        
-        # Application components (initialized in Phase 7)
-        # TODO: Initialize all components:
-        # self.mouse_controller = MouseController()
-        # self.click_scheduler = ClickScheduler(self.mouse_controller)
-        # self.status_indicator = StatusIndicator()
-        # self.hotkey_handler = HotkeyHandler(self.toggle_clicking)
-        
-        # TODO: In Phase 7 implementation:
-        # - Create instances of all components
-        # - Set up signal handlers for graceful shutdown
-        # - Initialize any additional application state
+
+        # Initialize application components
+        self.mouse_controller = MouseController()
+        self.click_scheduler = ClickScheduler(self.mouse_controller)
+        self.status_indicator = StatusIndicator()
+        self.hotkey_handler = HotkeyHandler(self.toggle_clicking)
 
     def toggle_clicking(self) -> None:
         """
         Toggle the auto-clicker between active and inactive states.
         
         This callback function is called by the hotkey handler when
-        the configured hotkey (numpad 5) is pressed. It manages the
-        transition between application states and coordinates all
-        components accordingly.
-        
-        When activating (inactive -> active):
-        1. Lock current mouse position
-        2. Start click scheduler
-        3. Show active status indicator
-        
-        When deactivating (active -> inactive):
-        1. Stop click scheduler
-        2. Unlock mouse position
-        3. Show inactive status indicator
-        
-        TODO: In Phase 7, implement full state transition logic
-        TODO: Add error handling for all component operations
-        TODO: Add console logging if CONSOLE_OUTPUT_ENABLED is True
+        the configured hotkey is pressed. It manages the transition
+        between application states and coordinates all components.
         """
         if not self.is_active:
             # Transition from inactive to active
-            # TODO: In Phase 7 implementation:
-            # self.mouse_controller.lock_current_position()
-            # self.click_scheduler.start()
-            # self.status_indicator.show_active()
-            # self.is_active = True
-            pass
+            try:
+                # Lock current mouse position
+                self.mouse_controller.lock_current_position()
+                self.locked_position = self.mouse_controller.locked_position
+
+                # Start clicking
+                self.click_scheduler.start()
+
+                # Update indicator to active state
+                self.status_indicator.show_active()
+                self.is_active = True
+            except Exception:
+                # Rollback on failure while remaining silent
+                try:
+                    self.click_scheduler.stop()
+                except Exception:
+                    pass
+                try:
+                    self.mouse_controller.unlock_position()
+                except Exception:
+                    pass
+                try:
+                    self.status_indicator.show_inactive()
+                except Exception:
+                    pass
+                self.locked_position = None
+                self.is_active = False
         else:
             # Transition from active to inactive
-            # TODO: In Phase 7 implementation:
-            # self.click_scheduler.stop()
-            # self.mouse_controller.unlock_position()
-            # self.status_indicator.show_inactive()
-            # self.is_active = False
-            pass
+            try:
+                # Stop clicking
+                self.click_scheduler.stop()
+            except Exception:
+                pass
+
+            # Unlock position
+            try:
+                self.mouse_controller.unlock_position()
+            except Exception:
+                pass
+            self.locked_position = None
+
+            # Update indicator to inactive state
+            try:
+                self.status_indicator.show_inactive()
+            except Exception:
+                pass
+            self.is_active = False
 
     def run(self) -> None:
         """
         Start the application and enter the main event loop.
         
-        This method should:
-        1. Start the hotkey handler to begin listening for key presses
-        2. Show the initial inactive status indicator
-        3. Enter the tkinter main loop to handle GUI events
-        4. Keep the application running until shutdown signal
-        
-        TODO: In Phase 7, implement application startup sequence
-        TODO: Set up signal handlers for Ctrl+C handling
-        TODO: Start hotkey handler in background
-        TODO: Show initial inactive indicator
-        TODO: Enter tkinter main loop
+        - Starts hotkey listener
+        - Shows initial inactive indicator
+        - Registers Ctrl+C handler
+        - Enters tkinter main loop
         """
-        # TODO: In Phase 7 implementation:
-        # try:
-        #     # Show initial inactive state
-        #     self.status_indicator.show_inactive()
-        #     
-        #     # Start hotkey handler
-        #     self.hotkey_handler.start()
-        #     
-        #     # Set up signal handler for Ctrl+C
-        #     signal.signal(signal.SIGINT, self._signal_handler)
-        #     
-        #     # Enter main GUI event loop
-        #     self.status_indicator.root.mainloop()
-        #     
-        # except KeyboardInterrupt:
-        #     self.cleanup()
-        # except Exception as e:
-        #     if CONSOLE_OUTPUT_ENABLED:
-        #         print(f"Application error: {e}")
-        #     self.cleanup()
-        
-        # Placeholder implementation
-        if True:  # Placeholder for actual implementation
-            print("ClickClick application would start here...")
-            print("Press Ctrl+C to exit (placeholder)")
-            try:
-                # TODO: Replace with actual tkinter main loop
-                while self.running:
-                    pass  # Placeholder event loop
-            except KeyboardInterrupt:
-                self.cleanup()
+        try:
+            # Show initial inactive state
+            self.status_indicator.show_inactive()
+
+            # Start hotkey handler
+            self.hotkey_handler.start()
+
+            # Set up signal handler for Ctrl+C
+            signal.signal(signal.SIGINT, self._signal_handler)
+
+            # Enter main GUI event loop
+            if self.status_indicator.root is not None:
+                self.status_indicator.root.mainloop()
+        except KeyboardInterrupt:
+            # Graceful shutdown on Ctrl+C
+            self._signal_handler(signal.SIGINT, None)
+        except Exception as e:
+            # Handle errors silently with optional console logging
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Application error: {e}")
+            self.cleanup()
 
     def cleanup(self) -> None:
         """
         Clean up all application resources before exit.
         
-        This method should be called during graceful shutdown to:
-        1. Stop the click scheduler if it's running
-        2. Stop the hotkey handler
-        3. Destroy the status indicator window
-        4. Perform any additional cleanup
-        
-        TODO: In Phase 7, implement comprehensive cleanup logic
-        TODO: Add error handling for cleanup operations
-        TODO: Ensure all threads are properly stopped
-        TODO: Add console logging if CONSOLE_OUTPUT_ENABLED is True
+        Ensures scheduler, hotkey handler, and indicator are stopped/destroyed.
+        Handles exceptions silently per project requirements.
         """
-        # TODO: In Phase 7 implementation:
-        # try:
-        #     if self.is_active:
-        #         self.click_scheduler.stop()
-        #     
-        #     if hasattr(self, 'hotkey_handler'):
-        #         self.hotkey_handler.stop()
-        #     
-        #     if hasattr(self, 'status_indicator'):
-        #         self.status_indicator.destroy()
-        #         
-        # except Exception as e:
-        #     if CONSOLE_OUTPUT_ENABLED:
-        #         print(f"Cleanup error: {e}")
-        # 
-        # self.running = False
-        
-        # Placeholder implementation
-        self.running = False
-        print("ClickClick application cleanup complete")
+        try:
+            if self.is_active:
+                try:
+                    self.click_scheduler.stop()
+                except Exception:
+                    pass
+
+            try:
+                self.hotkey_handler.stop()
+            except Exception:
+                pass
+
+            try:
+                self.status_indicator.destroy()
+            except Exception:
+                pass
+        except Exception as e:
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Cleanup error: {e}")
+        finally:
+            self.running = False
 
     def _signal_handler(self, signum, frame) -> None:
         """
@@ -197,14 +187,15 @@ class ClickClickApp:
         Args:
             signum: Signal number
             frame: Current stack frame
-            
-        TODO: In Phase 7, implement signal handling
         """
-        # TODO: In Phase 7 implementation:
-        # if signum == signal.SIGINT:
-        #     self.cleanup()
-        #     sys.exit(0)
-        pass
+        try:
+            self.cleanup()
+        finally:
+            try:
+                sys.exit(0)
+            except SystemExit:
+                # Re-raise to propagate exit cleanly
+                raise
 
     def get_status(self) -> dict:
         """
@@ -212,18 +203,14 @@ class ClickClickApp:
         
         Returns:
             dict: Current application state information
-            
-        TODO: In Phase 7, implement status reporting
         """
         return {
             'is_active': self.is_active,
             'locked_position': self.locked_position,
             'running': self.running
         }
-        
-    # TODO: Add additional methods for future features:
-    # - Configuration reload
-    # - Statistics tracking
-    # - Multi-instance coordination
-    # - Plugin system integration
-    # - Advanced logging and debugging
+
+
+if __name__ == '__main__':
+    app = ClickClickApp()
+    app.run()

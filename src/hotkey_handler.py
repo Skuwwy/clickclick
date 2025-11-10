@@ -7,11 +7,12 @@ the application's toggle callback when pressed.
 """
 
 from typing import Callable, Optional
-import threading
 
-# TODO: Import pynput components in Phase 6 implementation
-# from pynput import keyboard
-# from config import TOGGLE_HOTKEY
+# Import pynput keyboard components
+from pynput.keyboard import Key, Listener, KeyCode
+
+# Import configuration
+from config import TOGGLE_HOTKEY, CONSOLE_OUTPUT_ENABLED
 
 
 class HotkeyHandler:
@@ -32,78 +33,117 @@ class HotkeyHandler:
     def __init__(self, toggle_callback: Callable[[], None]) -> None:
         """
         Initialize the hotkey handler.
-        
+
         Args:
             toggle_callback: Function to call when hotkey is pressed
         """
+        if not callable(toggle_callback):
+            raise TypeError("toggle_callback must be callable")
+
         self.toggle_callback: Callable[[], None] = toggle_callback
-        self._listener: Optional[object] = None  # Will be keyboard.Listener in implementation
-        
-        # TODO: In Phase 6 implementation:
-        # - Initialize pynput keyboard listener
-        # - Set up _on_key_press callback
-        # - Configure listener for non-blocking operation
+
+        # Initialize pynput keyboard listener, but do not start yet
+        # Use _on_press as the callback for key press events
+        self._listener: Optional[Listener] = Listener(on_press=self._on_press)
+
+        # Ensure listener runs as a daemon when started to avoid blocking shutdown
+        self._listener.daemon = True
 
     def start(self) -> None:
         """
-        Start keyboard listening in background thread.
-        
-        This method should:
-        1. Initialize the pynput keyboard listener
-        2. Start the listener in a non-blocking manner
-        3. Allow the main application to continue running
-        
-        TODO: Implement using keyboard.Listener
-        TODO: Set daemon=True for clean thread exit
-        TODO: Handle any potential startup errors
+        Start keyboard listening in a non-blocking background thread.
+
+        The listener runs in the background and does not block the main thread.
+        Safe to call multiple times; will only start if not already running.
         """
-        # TODO: Remove this placeholder when implementing
-        # For now, just log that hotkey handler would start
-        if True:  # Placeholder for implementation
+        try:
+            if self._listener is None:
+                # Recreate listener if it was previously cleaned up
+                self._listener = Listener(on_press=self._on_press)
+                self._listener.daemon = True
+
+            # Start only if not already running
+            if not getattr(self._listener, "running", False):
+                self._listener.start()
+                if CONSOLE_OUTPUT_ENABLED:
+                    print(f"[DEBUG] Hotkey listener started. Configured hotkey: {TOGGLE_HOTKEY}")
+                    print(f"[DEBUG] Checking for Key enum value: Key.num_5")
+                    print(f"[DEBUG] Press Numpad 5 to see key detection...")
+        except Exception as e:
+            # Prevent any startup errors from crashing the application
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"[DEBUG] Error starting listener: {e}")
             pass
 
     def stop(self) -> None:
         """
         Stop keyboard listening and cleanup resources.
-        
-        This method should:
-        1. Stop the keyboard listener if it's running
-        2. Wait for any pending events to complete
-        3. Clean up any allocated resources
-        
-        TODO: Implement listener.stop() call
-        TODO: Handle listener cleanup gracefully
+
+        Ensures a clean shutdown of the listener thread.
         """
         if self._listener is not None:
-            # TODO: In Phase 6, implement:
-            # self._listener.stop()
-            # self._listener = None
-            pass
+            try:
+                self._listener.stop()
+                # Attempt to join briefly for clean shutdown; ignore if unsupported
+                try:
+                    self._listener.join(timeout=0.5)
+                except Exception:
+                    pass
+            except Exception:
+                # Prevent shutdown errors from bubbling up
+                pass
+            finally:
+                self._listener = None
 
-    def _on_key_press(self, key) -> None:
+    def _on_press(self, key) -> None:
         """
         Callback function for keyboard press events.
-        
-        This method should be called by pynput when a key is pressed.
-        It checks if the pressed key matches the configured hotkey
-        and calls the toggle callback if it does.
-        
+
+        Detects the configured hotkey (numpad 5) and invokes the toggle callback.
+        Handles both Key and KeyCode types safely without crashing.
+
         Args:
-            key: The key that was pressed (keyboard.Key or keyboard.KeyCode)
-            
-        TODO: Implement key matching logic
-        TODO: Handle AttributeError for special keys like Key.num_5
-        TODO: Map TOGGLE_HOTKEY config value to actual key object
-        TODO: Call self.toggle_callback() when hotkey matches
+            key: The key that was pressed (pynput.keyboard.Key or KeyCode)
         """
         try:
-            # TODO: In Phase 6 implementation:
-            # if key == keyboard.Key.num_5:  # Check for numpad 5
-            #     self.toggle_callback()
+            # DEBUG: Log every key press to understand what we're receiving
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"[DEBUG] Key pressed: {key}")
+                print(f"[DEBUG]   Type: {type(key)}")
+                if hasattr(key, 'vk'):
+                    print(f"[DEBUG]   Virtual Key Code: {key.vk}")
+                if hasattr(key, 'char'):
+                    print(f"[DEBUG]   Char: {key.char}")
+            
+            # Check for Numpad 5 key
+            # Numpad 5 with NumLock ON sends KeyCode with vk=101 on Windows
+            # We check for KeyCode type and the specific virtual key code
+            is_hotkey_match = False
+            
+            if isinstance(key, KeyCode):
+                # Numpad 5 with NumLock ON has virtual key code 101 (VK_NUMPAD5)
+                if key.vk == 101:
+                    is_hotkey_match = True
+                    if CONSOLE_OUTPUT_ENABLED:
+                        print(f"[DEBUG] HOTKEY MATCHED! (KeyCode vk=101 - Numpad 5)")
+            
+            if is_hotkey_match:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print("[DEBUG] Calling toggle_callback()")
+                self.toggle_callback()
+            elif CONSOLE_OUTPUT_ENABLED:
+                print(f"[DEBUG] No match (expected Numpad 5 with vk=101)")
+                print()
+                
+        except AttributeError as e:
+            # Some special keys may raise AttributeError; prevent listener crash
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"[DEBUG] AttributeError in _on_press: {e}")
             pass
-        except AttributeError:
-            # Handle special keys that don't have .name attribute
-            # TODO: In Phase 6, implement proper key comparison
+        except Exception as e:
+            # Guard against any unexpected errors from callback or comparison
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"[DEBUG] Exception in _on_press: {e}")
             pass
 
     # TODO: Add additional methods for future features:

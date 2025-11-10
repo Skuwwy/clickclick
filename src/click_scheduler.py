@@ -8,12 +8,14 @@ executes clicks at randomized intervals for natural behavior simulation.
 
 import threading
 import time
+import random
 from typing import Optional
 
-# TODO: Import required modules in Phase 5 implementation
-# import random
-# from mouse_controller import MouseController
-# from config import MIN_CLICK_DELAY, MAX_CLICK_DELAY, CONSOLE_OUTPUT_ENABLED
+# Import configuration constants
+from config import MIN_CLICK_DELAY, MAX_CLICK_DELAY, CONSOLE_OUTPUT_ENABLED
+
+# Import required modules for Phase 5 implementation
+from mouse_controller import MouseController
 
 
 class ClickScheduler:
@@ -34,20 +36,23 @@ class ClickScheduler:
     TODO: Ensure thread-safe access to is_active flag
     """
 
-    def __init__(self, mouse_controller) -> None:
+    def __init__(self, mouse_controller: MouseController) -> None:
         """
         Initialize the click scheduler.
         
         Args:
             mouse_controller: MouseController instance for executing clicks
         """
-        self.mouse_controller = mouse_controller
+        if mouse_controller is None:
+            raise ValueError("mouse_controller must not be None")
+        self.mouse_controller: MouseController = mouse_controller
         self.is_active: bool = False
         self.thread: Optional[threading.Thread] = None
+        # Lock to ensure thread-safe access to is_active and state changes
+        self._state_lock = threading.Lock()
         
-        # TODO: In Phase 5 implementation:
-        # - Validate mouse_controller parameter
-        # - Set up any additional threading-related initialization
+        if CONSOLE_OUTPUT_ENABLED:
+            print("ClickScheduler initialized")
 
     def start(self) -> None:
         """
@@ -61,84 +66,99 @@ class ClickScheduler:
         
         Raises:
             RuntimeError: If scheduler is already running
-            
-        TODO: Implement thread creation and startup
-        TODO: Add error handling for thread startup failures
-        TODO: Add console logging if CONSOLE_OUTPUT_ENABLED is True
         """
-        if self.is_active:
-            raise RuntimeError("Click scheduler is already running")
-            
-        self.is_active = True
-        
-        # TODO: In Phase 5 implementation:
-        # self.thread = threading.Thread(target=self._clicking_loop, daemon=True)
-        # self.thread.start()
-        pass
+        # Thread-safe activation
+        with self._state_lock:
+            if self.is_active:
+                raise RuntimeError("Click scheduler is already running")
+            self.is_active = True
+
+        # Create and start the background thread
+        self.thread = threading.Thread(
+            target=self._clicking_loop,
+            name="ClickSchedulerThread",
+            daemon=True,
+        )
+        try:
+            self.thread.start()
+            if CONSOLE_OUTPUT_ENABLED:
+                print("Click scheduler started")
+        except Exception as e:
+            # Roll back active state on failure
+            with self._state_lock:
+                self.is_active = False
+            self.thread = None
+            if CONSOLE_OUTPUT_ENABLED:
+                print(f"Failed to start click scheduler thread: {e}")
+            raise
 
     def stop(self) -> None:
         """
         Stop the click scheduler and wait for thread completion.
         
-        This method should:
-        1. Set is_active to False to signal thread to stop
-        2. Wait for the thread to complete (join)
-        3. Clean up thread reference
-        4. Handle any potential timeout issues
-        
-        TODO: Implement thread stopping and joining logic
-        TODO: Add timeout handling for thread join if needed
-        TODO: Add console logging if CONSOLE_OUTPUT_ENABLED is True
+        This method:
+        1. Sets is_active to False to signal thread to stop
+        2. Waits for the thread to complete (join) with timeout
+        3. Cleans up the thread reference
+        4. Logs state transitions if enabled
         """
-        if not self.is_active:
-            return
-            
-        self.is_active = False
-        
-        # TODO: In Phase 5 implementation:
-        # if self.thread is not None:
-        #     self.thread.join()
-        #     self.thread = None
-        pass
+        # Thread-safe deactivation
+        with self._state_lock:
+            if not self.is_active:
+                return
+            self.is_active = False
+
+        # Join the thread to wait for completion
+        if self.thread is not None:
+            try:
+                # Timeout slightly above max delay to avoid hanging
+                self.thread.join(timeout=MAX_CLICK_DELAY + 1.0)
+            except Exception as e:
+                if CONSOLE_OUTPUT_ENABLED:
+                    print(f"Error while joining click scheduler thread: {e}")
+            finally:
+                if self.thread.is_alive() and CONSOLE_OUTPUT_ENABLED:
+                    print("Click scheduler thread did not exit within timeout")
+                self.thread = None
+
+        if CONSOLE_OUTPUT_ENABLED:
+            print("Click scheduler stopped")
 
     def _clicking_loop(self) -> None:
         """
         Main clicking loop that runs in a background thread.
         
-        This method should:
-        1. Loop while is_active is True
-        2. Generate random delay using random.uniform()
-        3. Sleep for the delay duration
-        4. Execute click via mouse_controller.click_at_locked_position()
-        5. Handle any exceptions gracefully
-        
-        TODO: Implement the clicking loop with proper timing
-        TODO: Use MIN_CLICK_DELAY and MAX_CLICK_DELAY from config
-        TODO: Add error handling for mouse controller operations
-        TODO: Add console logging if CONSOLE_OUTPUT_ENABLED is True
+        This method:
+        1. Loops while is_active is True
+        2. Generates random delay using random.uniform()
+        3. Sleeps for the delay duration
+        4. Executes click via mouse_controller.click_at_locked_position()
+        5. Handles any exceptions gracefully
         """
-        # TODO: In Phase 5 implementation:
-        # while self.is_active:
-        #     try:
-        #         # Generate random delay
-        #         delay = random.uniform(MIN_CLICK_DELAY, MAX_CLICK_DELAY)
-        #         time.sleep(delay)
-        #         
-        #         # Execute click if still active
-        #         if self.is_active:
-        #             self.mouse_controller.click_at_locked_position()
-        #             
-        #     except Exception as e:
-        #         # Handle errors silently per requirements
-        #         if CONSOLE_OUTPUT_ENABLED:
-        #             print(f"Click execution error: {e}")
-        #         continue
-        pass
-        
-        # TODO: Remove this placeholder when implementing
-        while self.is_active:
-            # Placeholder - actual implementation will have sleep and click logic
-            time.sleep(0.1)  # Placeholder delay
+        while True:
+            # Check active state under lock for thread safety
+            with self._state_lock:
+                active = self.is_active
+            if not active:
+                break
+
+            try:
+                # Generate random delay between configured bounds
+                delay = random.uniform(MIN_CLICK_DELAY, MAX_CLICK_DELAY)
+                time.sleep(delay)
+
+                # Double-check active state before clicking
+                with self._state_lock:
+                    if not self.is_active:
+                        continue
+
+                # Execute the click
+                self.mouse_controller.click_at_locked_position()
+            except Exception as e:
+                # Handle errors silently per requirements, with optional logging
+                if CONSOLE_OUTPUT_ENABLED:
+                    print(f"Click execution error: {e}")
+                continue
 
     def get_status(self) -> dict:
         """

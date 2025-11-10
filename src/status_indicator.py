@@ -8,13 +8,15 @@ based on whether the auto-clicker is active or inactive.
 """
 
 import tkinter as tk
-from typing import Optional
+from typing import Optional, Tuple
+
+# Import configuration constants
+from config import (
+    INDICATOR_SIZE, INDICATOR_POSITION, INDICATOR_COLOR_ACTIVE,
+    INDICATOR_COLOR_INACTIVE, INDICATOR_OPACITY, INDICATOR_MARGIN
+)
 
 # TODO: Import configuration constants in Phase 4 implementation
-# from config import (
-#     INDICATOR_SIZE, INDICATOR_POSITION, INDICATOR_COLOR_ACTIVE,
-#     INDICATOR_COLOR_INACTIVE, INDICATOR_OPACITY
-# )
 
 
 class StatusIndicator:
@@ -43,161 +45,165 @@ class StatusIndicator:
         Sets up the tkinter root window, configures it as an overlay,
         creates the circular drawing, and positions it on screen.
         """
-        self.root: Optional[tk.Tk] = None
+        self.root: Optional[tk.Tk] = tk.Tk()
         self.canvas: Optional[tk.Canvas] = None
         self.circle_id: Optional[int] = None
-        
-        # TODO: In Phase 4 implementation:
-        # - Create tkinter root window
-        # - Configure window properties (overrideredirect, topmost, alpha)
-        # - Calculate position based on INDICATOR_POSITION config
-        # - Create Canvas with circular drawing
-        # - Set initial color to red (inactive)
+
+        # Configure window and create the indicator
+        self._setup_window()
+        self._create_canvas()
 
     def show_active(self) -> None:
         """
         Change the indicator to active state (green color).
-        
-        This method should update the circle color to indicate
-        that the auto-clicker is currently running and clicking.
-        
-        TODO: Implement color change to INDICATOR_COLOR_ACTIVE (green)
-        TODO: Add smooth transition animation if desired
-        TODO: Ensure thread-safety if called from background threads
+        Uses tkinter's after to be thread-safe if invoked from non-GUI threads.
         """
-        if self.circle_id is not None:
-            # TODO: In Phase 4 implementation:
-            # self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_ACTIVE)
-            pass
+        if self.root is not None and self.canvas is not None and self.circle_id is not None:
+            self.root.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_ACTIVE))
 
     def show_inactive(self) -> None:
         """
         Change the indicator to inactive state (red color).
-        
-        This method should update the circle color to indicate
-        that the auto-clicker is currently stopped and not clicking.
-        
-        TODO: Implement color change to INDICATOR_COLOR_INACTIVE (red)
-        TODO: Add smooth transition animation if desired
-        TODO: Ensure thread-safety if called from background threads
+        Uses tkinter's after to be thread-safe if invoked from non-GUI threads.
         """
-        if self.circle_id is not None:
-            # TODO: In Phase 4 implementation:
-            # self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_INACTIVE)
-            pass
+        if self.root is not None and self.canvas is not None and self.circle_id is not None:
+            self.root.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_INACTIVE))
 
     def destroy(self) -> None:
         """
         Close the indicator window and cleanup resources.
-        
-        This method should:
-        1. Close the tkinter window if it exists
-        2. Clean up any allocated resources
-        3. Reset instance variables
-        
-        TODO: Implement proper window destruction
-        TODO: Add error handling for cleanup
-        TODO: Ensure all tkinter resources are properly released
         """
         if self.root is not None:
-            # TODO: In Phase 4 implementation:
-            # self.root.destroy()
-            # self.root = None
-            # self.canvas = None
-            # self.circle_id = None
-            pass
+            try:
+                # Safely destroy the tkinter window
+                self.root.destroy()
+            except tk.TclError:
+                # Window may already be destroyed; ignore
+                pass
+            finally:
+                # Reset references
+                self.root = None
+                self.canvas = None
+                self.circle_id = None
 
-    def _calculate_position(self) -> tuple:
+    def _calculate_position(self) -> Tuple[int, int]:
         """
         Calculate the screen position for the indicator based on config.
-        
-        This method should position the indicator in the configured
-        corner of the screen with appropriate margins.
-        
+
+        Positions in one of the four corners with INDICATOR_MARGIN offset.
+
         Returns:
-            tuple: (x, y) coordinates for window placement
-            
-        TODO: Implement position calculation logic
-        TODO: Use INDICATOR_SIZE and screen dimensions
-        TODO: Handle all four corner positions (top-right, top-left, etc.)
-        TODO: Add appropriate margins from screen edges
+            Tuple[int, int]: (x, y) coordinates for window placement
         """
-        # TODO: In Phase 4 implementation:
-        # screen_width = self.root.winfo_screenwidth()
-        # screen_height = self.root.winfo_screenheight()
-        # 
-        # if INDICATOR_POSITION == 'top-right':
-        #     x = screen_width - INDICATOR_SIZE - 10
-        #     y = 10
-        # elif INDICATOR_POSITION == 'top-left':
-        #     x = 10
-        #     y = 10
-        # elif INDICATOR_POSITION == 'bottom-right':
-        #     x = screen_width - INDICATOR_SIZE - 10
-        #     y = screen_height - INDICATOR_SIZE - 10
-        # elif INDICATOR_POSITION == 'bottom-left':
-        #     x = 10
-        #     y = screen_height - INDICATOR_SIZE - 10
-        # 
-        # return (x, y)
-        return (100, 100)  # Placeholder return
+        if self.root is None:
+            return 0, 0
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        size = INDICATOR_SIZE
+        margin = INDICATOR_MARGIN
+        position = (INDICATOR_POSITION or 'top-right').lower()
+
+        # Vertical position
+        if 'top' in position:
+            y = margin
+        elif 'bottom' in position:
+            y = max(0, screen_height - size - margin)
+        else:
+            # Default to top if unspecified
+            y = margin
+
+        # Horizontal position
+        if 'left' in position:
+            x = margin
+        elif 'right' in position:
+            x = max(0, screen_width - size - margin)
+        else:
+            # Default to right if unspecified
+            x = max(0, screen_width - size - margin)
+
+        return x, y
 
     def _setup_window(self) -> None:
         """
         Configure the tkinter window for overlay display.
-        
-        This method should set up all window properties including:
-        - Remove window decorations (overrideredirect)
-        - Set always-on-top behavior (topmost)
-        - Configure transparency (alpha)
-        - Set appropriate window size and position
-        
-        TODO: Handle cross-platform transparency differences
-        TODO: Set window geometry based on calculated position
-        TODO: Configure window to not steal focus
+
+        - Frameless (overrideredirect)
+        - Always on top
+        - Transparency via alpha, with Windows-specific color key
+        - Window sized and positioned according to configuration
         """
-        # TODO: In Phase 4 implementation:
-        # self.root.overrideredirect(True)  # Remove window decorations
-        # self.root.attributes('-topmost', True)  # Always on top
-        # self.root.attributes('-alpha', INDICATOR_OPACITY)  # Transparency
-        # 
-        # # Platform-specific transparency
-        # import platform
-        # if platform.system() == 'Windows':
-        #     self.root.attributes('-transparentcolor', 'white')
-        # 
-        # # Set window size and position
-        # self.root.geometry(f'{INDICATOR_SIZE}x{INDICATOR_SIZE}+{x}+{y}')
-        pass
+        if self.root is None:
+            return
+
+        # Remove window decorations and keep on top
+        self.root.overrideredirect(True)
+        self.root.attributes('-topmost', True)
+
+        # Base window background set to white. On Windows, we make this white fully transparent.
+        self.root.configure(bg='white')
+
+        # Clamp and apply opacity if supported
+        try:
+            opacity = float(INDICATOR_OPACITY)
+        except (TypeError, ValueError):
+            opacity = 0.7
+        opacity = max(0.0, min(1.0, opacity))
+        try:
+            self.root.attributes('-alpha', opacity)
+        except tk.TclError:
+            # Some platforms/window managers may not support alpha
+            pass
+
+        # Platform-specific transparency handling
+        try:
+            import platform
+            if platform.system() == 'Windows':
+                # Make white color fully transparent on Windows
+                self.root.attributes('-transparentcolor', 'white')
+        except Exception:
+            # Be conservative: any platform-specific issues are non-fatal
+            pass
+
+        # Disable resizing
+        self.root.resizable(False, False)
+
+        # Set window size and position
+        x, y = self._calculate_position()
+        self.root.geometry(f'{INDICATOR_SIZE}x{INDICATOR_SIZE}+{x}+{y}')
 
     def _create_canvas(self) -> None:
         """
         Create and configure the canvas for circular drawing.
         
-        This method should:
-        1. Create a tkinter Canvas with appropriate size
-        2. Draw a circle that fills most of the canvas area
-        3. Set the initial color to red (inactive)
-        4. Configure canvas to be non-interactive
-        
-        TODO: Implement circular drawing with oval
-        TODO: Set proper margins for circle within canvas
-        TODO: Configure canvas for non-interactive use
+        - Creates a tkinter Canvas sized to INDICATOR_SIZE
+        - Draws a circle occupying the full INDICATOR_SIZE (30x30 pixels)
+        - Initializes the circle color to inactive (red)
         """
-        # TODO: In Phase 4 implementation:
-        # self.canvas = tk.Canvas(self.root, width=INDICATOR_SIZE, height=INDICATOR_SIZE, 
-        #                        highlightthickness=0, bg='white')
-        # self.canvas.pack()
-        # 
-        # # Draw circle with margins
-        # margin = 2
-        # self.circle_id = self.canvas.create_oval(
-        #     margin, margin, 
-        #     INDICATOR_SIZE - margin, INDICATOR_SIZE - margin,
-        #     fill=INDICATOR_COLOR_INACTIVE,  # Start as red (inactive)
-        #     outline=''
-        # )
-        pass
+        if self.root is None:
+            return
+
+        self.canvas = tk.Canvas(
+            self.root,
+            width=INDICATOR_SIZE,
+            height=INDICATOR_SIZE,
+            highlightthickness=0,
+            bg='white',
+            bd=0
+        )
+        self.canvas.pack()
+
+        # Draw circle with no margin to meet 30x30 requirement
+        margin = 0
+        self.circle_id = self.canvas.create_oval(
+            margin,
+            margin,
+            INDICATOR_SIZE - margin,
+            INDICATOR_SIZE - margin,
+            fill=INDICATOR_COLOR_INACTIVE,
+            outline=''
+        )
         
     # TODO: Add additional methods for future features:
     # - Multiple indicator support (multi-monitor)

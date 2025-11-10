@@ -24,7 +24,11 @@ INDICATOR_COLOR_INACTIVE: str = '#FF0000'  # Red color for inactive state
 INDICATOR_OPACITY: float = 0.7  # Transparency level (0.0 to 1.0)
 
 # Debug Configuration
-CONSOLE_OUTPUT_ENABLED: bool = False  # Set to True for console logging during development
+CONSOLE_OUTPUT_ENABLED: bool = True  # Set to True for console logging during development
+
+# Additional Configuration Constants for Implementation
+PLACEHOLDER_DELAY: float = 0.1  # Placeholder delay for implementation (will be removed in final version)
+INDICATOR_MARGIN: int = 10  # Margin from screen edges for indicator positioning
 
 # TODO: Add additional configuration options for future features:
 # - Multiple click types (right-click, double-click)
