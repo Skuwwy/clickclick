@@ -54,8 +54,9 @@ class GUIWindow:
         # Basic window configuration
         self.window.title("ClickClick Auto-Clicker")
         try:
-            self.window.geometry("420x560")
-            self.window.minsize(420, 520)
+            # Extra vertical space prevents bottom controls from clipping on some displays
+            self.window.geometry("520x800")
+            self.window.minsize(520, 800)
         except Exception:
             pass
         try:
@@ -128,29 +129,30 @@ class GUIWindow:
 
         self.window.configure(bg=base_bg)
         try:
-            self.window.option_add("*Font", "Segoe UI 10")
+            self.window.option_add("*Font", "{Segoe UI} 10")
         except tk.TclError:
             pass
 
         self.style.configure("Main.TFrame", background=base_bg)
         self.style.configure("Card.TFrame", background=card_bg, relief="flat", borderwidth=0)
         self.style.configure("CardBody.TFrame", background=card_bg)
-        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=("Segoe UI", 12, "bold"))
-        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=("Segoe UI", 16, "bold"))
-        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=("Segoe UI", 10))
-        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=("Segoe UI", 10))
-        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=("Segoe UI", 10))
-        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=("Segoe UI", 11))
-        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=("Segoe UI", 9))
-        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=("Segoe UI", 9))
-        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=("Segoe UI", 11, "bold"))
-        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=("Segoe UI", 11, "bold"))
+        seg = "{Segoe UI}"
+        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=(seg, 12, "bold"))
+        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=(seg, 16, "bold"))
+        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=(seg, 10))
+        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=(seg, 10))
+        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=(seg, 10))
+        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=(seg, 11))
+        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=(seg, 9))
+        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=(seg, 9))
+        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=(seg, 11, "bold"))
+        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=(seg, 11, "bold"))
 
         self.style.configure(
             "Accent.TButton",
             background=accent,
             foreground="#F9FAFB",
-            font=("Segoe UI", 10, "bold"),
+            font=(seg, 10, "bold"),
             padding=(16, 10),
         )
         self.style.map(
@@ -162,7 +164,7 @@ class GUIWindow:
             "Danger.TButton",
             background=danger,
             foreground="#F9FAFB",
-            font=("Segoe UI", 10, "bold"),
+            font=(seg, 10, "bold"),
             padding=(16, 10),
         )
         self.style.map(
@@ -174,7 +176,7 @@ class GUIWindow:
             "Secondary.TButton",
             background=secondary_bg,
             foreground="#E5E7EB",
-            font=("Segoe UI", 10),
+            font=(seg, 10),
             padding=(16, 10),
         )
         self.style.map(
@@ -183,8 +185,12 @@ class GUIWindow:
             foreground=[("disabled", "#6B7280")],
         )
 
-        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=("Segoe UI", 10))
+        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=(seg, 10))
         self.style.map("Toggle.TCheckbutton", foreground=[("disabled", "#6B7280")])
+        # Create a spinbox variant using the standard TSpinbox layout so ttk can resolve it
+        spinbox_layout = self.style.layout("TSpinbox")
+        if spinbox_layout:
+            self.style.layout("Input.Spinbox", spinbox_layout)
         self.style.configure(
             "Input.Spinbox",
             background=card_bg,
