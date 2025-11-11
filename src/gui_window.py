@@ -3,8 +3,8 @@ GUI control window for ClickClick auto-clicker application.
 
 Provides a Tkinter-based control panel with:
 - Start/Stop toggle button
-- Min/Max delay controls (0.1–10.0 seconds)
-- Position offset range control (0–50 pixels)
+- Min/Max delay controls (0.1-10.0 seconds)
+- Position offset range control (0-50 pixels)
 - Hotkey capture (stored in settings)
 - Status display and position info
 - Always-on-top toggle
@@ -15,12 +15,17 @@ The GUI window integrates with the main application controller and backend
 components via callbacks provided by ClickClickApp.
 """
 
+from __future__ import annotations
+
+import ctypes
 import json
 import os
+import queue
 import threading
 import tkinter as tk
+from dataclasses import dataclass
 from tkinter import ttk
-from typing import Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 try:
     # pynput is optional at runtime; GUI should still function without capture
@@ -30,6 +35,148 @@ except Exception:
 
 
 SETTINGS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "settings.json"))
+
+SPACE_4 = 4
+SPACE_8 = 8
+SPACE_12 = 12
+SPACE_16 = 16
+
+
+def hex_lerp(a: str, b: str, t: float) -> str:
+    """Interpolate between two hex colors."""
+    a = a.lstrip("#")
+    b = b.lstrip("#")
+    if len(a) != 6 or len(b) != 6:
+        return a if t <= 0 else b
+    t = max(0.0, min(1.0, t))
+    start = tuple(int(a[i : i + 2], 16) for i in range(0, 6, 2))
+    end = tuple(int(b[i : i + 2], 16) for i in range(0, 6, 2))
+    blended = tuple(int(round(s + (e - s) * t)) for s, e in zip(start, end))
+    return "#{:02X}{:02X}{:02X}".format(*blended)
+
+
+def apply_window_bg(root: tk.Misc, theme: "Theme" | None = None) -> None:
+    """Ensure the base Tk window uses the theme background."""
+    palette = theme or THEME
+    try:
+        root.configure(bg=palette.window_bg)
+    except Exception:
+        pass
+
+
+@dataclass(frozen=True)
+class Theme:
+    window_bg: str = "#0f172a"
+    card_bg: str = "#111827"
+    accent: str = "#2563EB"
+    danger: str = "#DC2626"
+    secondary_bg: str = "#1f2937"
+    highlight: str = "#60A5FA"
+    body_text: str = "#E5E7EB"
+    strong_text: str = "#F3F4F6"
+    muted_text: str = "#9CA3AF"
+    pill_idle_bg: str = "#1f2937"
+    pill_idle_fg: str = "#F9FAFB"
+    font_family: str = "Segoe UI"
+
+    def configure(self, root: tk.Misc, style: ttk.Style) -> None:
+        apply_window_bg(root, self)
+        try:
+            root.option_add("*Font", f"{{{self.font_family}}} 10")
+        except tk.TclError:
+            pass
+
+        accent_hover = hex_lerp(self.accent, "#FFFFFF", 0.12)
+        accent_active = hex_lerp(self.accent, "#000000", 0.2)
+        danger_hover = hex_lerp(self.danger, "#FFFFFF", 0.12)
+        danger_active = hex_lerp(self.danger, "#000000", 0.2)
+        secondary_hover = hex_lerp(self.secondary_bg, "#FFFFFF", 0.08)
+        secondary_active = hex_lerp(self.secondary_bg, "#000000", 0.12)
+
+        style.configure("Main.TFrame", background=self.window_bg)
+        style.configure("Header.TFrame", background=self.window_bg)
+        style.configure("Card.TFrame", background=self.card_bg, relief="flat", borderwidth=0)
+        style.configure("CardBody.TFrame", background=self.card_bg)
+        style.configure("TSeparator", background=self.secondary_bg)
+
+        heading_font = (self.font_family, 16, "bold")
+        card_heading_font = (self.font_family, 12, "bold")
+        subtitle_font = (self.font_family, 10)
+        strong_font = (self.font_family, 11)
+        pill_font = (self.font_family, 9, "bold")
+
+        style.configure("Header.TLabel", background=self.window_bg, foreground="#F9FAFB", font=heading_font)
+        style.configure("Subtitle.TLabel", background=self.window_bg, foreground=self.muted_text, font=subtitle_font)
+        style.configure("CardHeading.TLabel", background=self.card_bg, foreground="#F9FAFB", font=card_heading_font)
+        style.configure("Body.TLabel", background=self.card_bg, foreground=self.body_text, font=subtitle_font)
+        style.configure("Muted.TLabel", background=self.card_bg, foreground=self.muted_text, font=subtitle_font)
+        style.configure("Strong.TLabel", background=self.card_bg, foreground=self.strong_text, font=strong_font)
+        style.configure("Meta.TLabel", background=self.card_bg, foreground=self.highlight, font=(self.font_family, 9))
+        style.configure("Error.TLabel", background=self.card_bg, foreground="#F87171", font=(self.font_family, 9))
+        style.configure("StatusActive.TLabel", background=self.card_bg, foreground="#34D399", font=(self.font_family, 11, "bold"))
+        style.configure("StatusInactive.TLabel", background=self.card_bg, foreground="#F87171", font=(self.font_family, 11, "bold"))
+        style.configure(
+            "Pill.TLabel",
+            background=self.pill_idle_bg,
+            foreground=self.pill_idle_fg,
+            font=pill_font,
+            padding=(SPACE_8, SPACE_4),
+        )
+
+        button_padding = (SPACE_16, SPACE_8)
+        style.configure(
+            "Primary.TButton",
+            background=self.accent,
+            foreground="#F9FAFB",
+            font=(self.font_family, 10, "bold"),
+            padding=button_padding,
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", accent_hover), ("pressed", accent_active)],
+            foreground=[("disabled", self.muted_text)],
+        )
+        style.configure(
+            "Danger.TButton",
+            background=self.danger,
+            foreground="#F9FAFB",
+            font=(self.font_family, 10, "bold"),
+            padding=button_padding,
+        )
+        style.map(
+            "Danger.TButton",
+            background=[("active", danger_hover), ("pressed", danger_active)],
+            foreground=[("disabled", "#FECACA")],
+        )
+        style.configure(
+            "Secondary.TButton",
+            background=self.secondary_bg,
+            foreground=self.body_text,
+            font=(self.font_family, 10),
+            padding=button_padding,
+        )
+        style.map(
+            "Secondary.TButton",
+            background=[("active", secondary_hover), ("pressed", secondary_active)],
+            foreground=[("disabled", self.muted_text)],
+        )
+
+        style.configure("Toggle.TCheckbutton", background=self.card_bg, foreground=self.body_text, font=(self.font_family, 10))
+        style.map("Toggle.TCheckbutton", foreground=[("disabled", self.muted_text)])
+
+        spinbox_layout = style.layout("TSpinbox")
+        if spinbox_layout:
+            style.layout("Input.Spinbox", spinbox_layout)
+        style.configure(
+            "Input.Spinbox",
+            background=self.card_bg,
+            foreground="#F9FAFB",
+            fieldbackground=self.secondary_bg,
+            arrowsize=12,
+        )
+
+
+THEME = Theme()
 
 
 class GUIWindow:
@@ -45,11 +192,15 @@ class GUIWindow:
         self.app = app
         self.parent_root = parent_root
 
+        self._configure_dpi_awareness()
+
         # Create the window attached to the shared root if provided
         if self.parent_root is not None:
             self.window: tk.Toplevel = tk.Toplevel(self.parent_root)
         else:
             self.window = tk.Tk()
+
+        self._configure_tk_scaling()
 
         # Basic window configuration
         self.window.title("ClickClick Auto-Clicker")
@@ -75,6 +226,20 @@ class GUIWindow:
         self._offset_display_label: Optional[ttk.Label] = None
         self._offset_scale: Optional[ttk.Scale] = None
         self._in_offset_update = False
+        self.status_pill_label: Optional[tk.Label] = None
+        self.status_message_label: Optional[ttk.Label] = None
+        self.version_label: Optional[ttk.Label] = None
+
+        self.theme = THEME
+        self._debounce_handles: dict[str, str] = {}
+        self._ui_event_queue: queue.Queue[Callable[[], None]] = queue.Queue()
+        self._ui_event_after: Optional[str] = None
+        self._animation_handles: dict[str, str] = {}
+        self._is_running = False
+        self._status_pill_colors: dict[str, tuple[str, str]] = {
+            "idle": (self.theme.pill_idle_bg, self.theme.pill_idle_fg),
+            "running": ("#064E3B", "#ECFDF5"),
+        }
 
         self.min_delay_var = tk.IntVar(value=1)
         self.max_delay_var = tk.IntVar(value=3)
@@ -98,6 +263,7 @@ class GUIWindow:
         self._apply_theme()
         self._build_layout()
         self._bind_behaviors()
+        self._start_ui_event_pump()
         self._validate_timing_inputs()
         self._on_offset_var_changed()
 
@@ -112,135 +278,133 @@ class GUIWindow:
         # Push hotkey to handler
         self._apply_hotkey_to_handler()
 
+    def _configure_dpi_awareness(self) -> None:
+        if os.name != "nt":
+            return
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
+
+    def _configure_tk_scaling(self) -> None:
+        if not hasattr(self, "window"):
+            return
+        scaling = 1.0
+        if os.name == "nt":
+            try:
+                dpi = float(self.window.winfo_fpixels("1i"))
+                scaling = max(1.0, dpi / 96.0)
+            except Exception:
+                scaling = 1.25
+        try:
+            self.window.tk.call("tk", "scaling", scaling)
+        except Exception:
+            pass
+
     # Layout construction
     def _apply_theme(self) -> None:
-        base_bg = "#0f172a"
-        card_bg = "#111827"
-        accent = "#2563EB"
-        danger = "#DC2626"
-        secondary_bg = "#1f2937"
-        highlight = "#60A5FA"
-
         self.style = ttk.Style(self.window)
         try:
             self.style.theme_use("clam")
         except tk.TclError:
             pass
-
-        self.window.configure(bg=base_bg)
-        try:
-            self.window.option_add("*Font", "{Segoe UI} 10")
-        except tk.TclError:
-            pass
-
-        self.style.configure("Main.TFrame", background=base_bg)
-        self.style.configure("Card.TFrame", background=card_bg, relief="flat", borderwidth=0)
-        self.style.configure("CardBody.TFrame", background=card_bg)
-        seg = "{Segoe UI}"
-        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=(seg, 12, "bold"))
-        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=(seg, 16, "bold"))
-        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=(seg, 10))
-        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=(seg, 10))
-        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=(seg, 10))
-        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=(seg, 11))
-        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=(seg, 9))
-        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=(seg, 9))
-        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=(seg, 11, "bold"))
-        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=(seg, 11, "bold"))
-
-        self.style.configure(
-            "Accent.TButton",
-            background=accent,
-            foreground="#F9FAFB",
-            font=(seg, 10, "bold"),
-            padding=(16, 10),
-        )
-        self.style.map(
-            "Accent.TButton",
-            background=[("active", "#1D4ED8"), ("pressed", "#1E40AF")],
-            foreground=[("disabled", "#9CA3AF")],
-        )
-        self.style.configure(
-            "Danger.TButton",
-            background=danger,
-            foreground="#F9FAFB",
-            font=(seg, 10, "bold"),
-            padding=(16, 10),
-        )
-        self.style.map(
-            "Danger.TButton",
-            background=[("active", "#B91C1C"), ("pressed", "#7F1D1D")],
-            foreground=[("disabled", "#FECACA")],
-        )
-        self.style.configure(
-            "Secondary.TButton",
-            background=secondary_bg,
-            foreground="#E5E7EB",
-            font=(seg, 10),
-            padding=(16, 10),
-        )
-        self.style.map(
-            "Secondary.TButton",
-            background=[("active", "#374151"), ("pressed", "#1f2937")],
-            foreground=[("disabled", "#6B7280")],
-        )
-
-        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=(seg, 10))
-        self.style.map("Toggle.TCheckbutton", foreground=[("disabled", "#6B7280")])
-        # Create a spinbox variant using the standard TSpinbox layout so ttk can resolve it
-        spinbox_layout = self.style.layout("TSpinbox")
-        if spinbox_layout:
-            self.style.layout("Input.Spinbox", spinbox_layout)
-        self.style.configure(
-            "Input.Spinbox",
-            background=card_bg,
-            foreground="#F9FAFB",
-            fieldbackground="#1f2937",
-            arrowsize=12,
-        )
-        self.style.configure("TSeparator", background="#1f2937")
+        self.theme.configure(self.window, self.style)
 
     def _create_card(self, parent: ttk.Frame, title: str) -> ttk.Frame:
-        card = ttk.Frame(parent, style="Card.TFrame", padding=(16, 18))
-        card.pack(fill="x", pady=(0, 16))
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(SPACE_16, SPACE_16))
+        card.pack(fill="x", pady=(0, SPACE_16))
 
         ttk.Label(card, text=title, style="CardHeading.TLabel").pack(anchor="w")
-        ttk.Separator(card).pack(fill="x", pady=(10, 14))
+        ttk.Separator(card).pack(fill="x", pady=(SPACE_8, SPACE_12))
 
         body = ttk.Frame(card, style="CardBody.TFrame")
         body.pack(fill="x")
         return body
 
+    def _build_header_bar(self, parent: ttk.Frame) -> None:
+        header = ttk.Frame(parent, style="Header.TFrame", padding=(SPACE_16, SPACE_12))
+        header.pack(fill="x", pady=(0, SPACE_16))
+
+        text_area = ttk.Frame(header, style="Header.TFrame")
+        text_area.pack(side="left", fill="both", expand=True)
+
+        title_row = ttk.Frame(text_area, style="Header.TFrame")
+        title_row.pack(fill="x")
+        ttk.Label(title_row, text=self._resolve_app_name(), style="Header.TLabel").pack(side="left", anchor="w")
+
+        version = self._resolve_version_text()
+        if version:
+            self.version_label = ttk.Label(title_row, text=version, style="Subtitle.TLabel")
+            self.version_label.pack(side="left", padx=(SPACE_8, 0))
+
+        self.status_message_label = ttk.Label(
+            text_area,
+            text="Automation idle",
+            style="Subtitle.TLabel",
+        )
+        self.status_message_label.pack(anchor="w", pady=(SPACE_4, 0))
+
+        pill_bg, pill_fg = self._status_pill_colors["idle"]
+        self.status_pill_label = tk.Label(
+            header,
+            text="Idle",
+            font=(self.theme.font_family, 9, "bold"),
+            bg=pill_bg,
+            fg=pill_fg,
+            padx=SPACE_12,
+            pady=SPACE_4,
+            borderwidth=0,
+            relief="flat",
+        )
+        self.status_pill_label.pack(side="right", anchor="e")
+
+    def _resolve_app_name(self) -> str:
+        app_name = getattr(self.app, "APP_NAME", None)
+        if isinstance(app_name, str) and app_name.strip():
+            return app_name
+        config_name = getattr(getattr(self.app, "config", None), "APP_NAME", None)
+        if isinstance(config_name, str) and config_name.strip():
+            return config_name
+        return "ClickClick!"
+
+    def _resolve_version_text(self) -> str:
+        version = getattr(self.app, "VERSION", None) or getattr(self.app, "__version__", None)
+        if version is None and hasattr(self.app, "config"):
+            version = getattr(self.app.config, "VERSION", None)
+        if isinstance(version, (str, int, float)):
+            version_str = str(version).strip()
+            if version_str:
+                return version_str if version_str.startswith("v") else f"v{version_str}"
+        return ""
+
     def _build_layout(self) -> None:
         root = self.window
 
-        container = ttk.Frame(root, style="Main.TFrame", padding=24)
+        container = ttk.Frame(root, style="Main.TFrame", padding=SPACE_16 + SPACE_8)
         container.pack(fill="both", expand=True)
 
-        ttk.Label(container, text="ClickClick Auto-Clicker", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(
-            container,
-            text="Configure timing, offsets and automation hotkeys.",
-            style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(4, 22))
+        self._build_header_bar(container)
 
         # Status Section
         status_body = self._create_card(container, "Live Status")
         status_body.columnconfigure(0, weight=1)
         status_body.columnconfigure(1, weight=1)
 
-        ttk.Label(status_body, text="Status", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(status_body, text="Status", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
         self.status_value_label = ttk.Label(status_body, text="Inactive", style="StatusInactive.TLabel")
         self.status_value_label.grid(row=0, column=1, sticky="e")
 
-        self.position_label = ttk.Label(status_body, text="Position: Not Locked", style="BodyStrong.TLabel")
+        self.position_label = ttk.Label(status_body, text="Position: Not Locked", style="Strong.TLabel")
         self.position_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         self.start_stop_button = ttk.Button(
             status_body,
             text="Start Auto-Clicker",
             command=self._on_toggle_clicked,
-            style="Accent.TButton",
+            style="Primary.TButton",
         )
         self.start_stop_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(18, 0))
 
@@ -250,7 +414,7 @@ class GUIWindow:
         timing_body.columnconfigure(1, weight=1)
         timing_body.columnconfigure(2, weight=1)
 
-        ttk.Label(timing_body, text="Min Delay (sec)", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(timing_body, text="Min Delay (sec)", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
         min_spin = ttk.Spinbox(
             timing_body,
             from_=1,
@@ -263,7 +427,7 @@ class GUIWindow:
         )
         min_spin.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-        ttk.Label(timing_body, text="Max Delay (sec)", style="BodyMuted.TLabel").grid(row=1, column=0, sticky="w", pady=(12, 0))
+        ttk.Label(timing_body, text="Max Delay (sec)", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(12, 0))
         max_spin = ttk.Spinbox(
             timing_body,
             from_=1,
@@ -280,7 +444,7 @@ class GUIWindow:
             timing_body,
             text="Apply Timing",
             command=self._apply_delay_settings,
-            style="Accent.TButton",
+            style="Primary.TButton",
         )
         self.apply_timing_button.grid(row=0, column=2, rowspan=2, sticky="ew", padx=(18, 0))
 
@@ -295,8 +459,8 @@ class GUIWindow:
         offset_body.columnconfigure(0, weight=1)
         offset_body.columnconfigure(1, weight=1)
 
-        ttk.Label(offset_body, text="Randomize each click within:", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
-        self._offset_display_label = ttk.Label(offset_body, text="±3 px", style="BodyStrong.TLabel")
+        ttk.Label(offset_body, text="Randomize each click within:", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        self._offset_display_label = ttk.Label(offset_body, text="±3 px", style="Strong.TLabel")
         self._offset_display_label.grid(row=0, column=1, sticky="e")
 
         self._offset_scale = ttk.Scale(
@@ -331,8 +495,8 @@ class GUIWindow:
         hotkey_body.columnconfigure(0, weight=1)
         hotkey_body.columnconfigure(1, weight=1)
 
-        ttk.Label(hotkey_body, text="Current Hotkey", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(hotkey_body, textvariable=self.hotkey_var, style="BodyStrong.TLabel").grid(
+        ttk.Label(hotkey_body, text="Current Hotkey", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(hotkey_body, textvariable=self.hotkey_var, style="Strong.TLabel").grid(
             row=1, column=0, sticky="w", pady=(6, 0)
         )
         ttk.Button(hotkey_body, text="Capture New Hotkey", command=self._capture_hotkey, style="Secondary.TButton").grid(
@@ -386,16 +550,127 @@ class GUIWindow:
             footer,
             text="Save Settings",
             command=self.save_settings,
-            style="Accent.TButton",
+            style="Primary.TButton",
         ).grid(row=0, column=1, sticky="e")
 
     def _bind_behaviors(self) -> None:
         try:
             self.offset_range_var.trace_add("write", lambda *args: self._on_offset_var_changed())
-            self.min_delay_var.trace_add("write", lambda *args: self._validate_timing_inputs())
-            self.max_delay_var.trace_add("write", lambda *args: self._validate_timing_inputs())
+            self.min_delay_var.trace_add(
+                "write",
+                lambda *args: self.debounce("timing_validation", 150, self._validate_timing_inputs),
+            )
+            self.max_delay_var.trace_add(
+                "write",
+                lambda *args: self.debounce("timing_validation", 150, self._validate_timing_inputs),
+            )
         except Exception:
             pass
+
+    def debounce(self, key: str, delay_ms: int, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+        handle = self._debounce_handles.get(key)
+        if handle is not None:
+            try:
+                self.window.after_cancel(handle)
+            except Exception:
+                pass
+
+        def _invoke() -> None:
+            self._debounce_handles.pop(key, None)
+            func(*args, **kwargs)
+
+        try:
+            self._debounce_handles[key] = self.window.after(delay_ms, _invoke)
+        except Exception:
+            _invoke()
+
+    def post_ui_event(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
+        def _callback() -> None:
+            func(*args, **kwargs)
+
+        self._ui_event_queue.put(_callback)
+
+    def _start_ui_event_pump(self) -> None:
+        if self._ui_event_after is not None:
+            return
+
+        def _drain_queue() -> None:
+            while True:
+                try:
+                    callback = self._ui_event_queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    callback()
+                except Exception:
+                    pass
+            try:
+                self._ui_event_after = self.window.after(30, _drain_queue)
+            except Exception:
+                self._ui_event_after = None
+
+        try:
+            self._ui_event_after = self.window.after(30, _drain_queue)
+        except Exception:
+            _drain_queue()
+
+    def _stop_ui_event_pump(self) -> None:
+        if self._ui_event_after is None:
+            return
+        try:
+            self.window.after_cancel(self._ui_event_after)
+        except Exception:
+            pass
+        finally:
+            self._ui_event_after = None
+
+    def animate_color(
+        self,
+        key: str,
+        from_hex: str,
+        to_hex: str,
+        duration_ms: int,
+        setter: Callable[[str], None],
+        steps: int = 10,
+    ) -> None:
+        handle = self._animation_handles.pop(key, None)
+        if handle is not None:
+            try:
+                self.window.after_cancel(handle)
+            except Exception:
+                pass
+        from_hex = self._coerce_color_hex(from_hex, to_hex)
+        to_hex = self._coerce_color_hex(to_hex, from_hex)
+        if from_hex.lower() == to_hex.lower():
+            setter(to_hex)
+            return
+        steps = max(2, steps)
+        interval = max(16, duration_ms // steps) if duration_ms > 0 else 0
+        step_state = {"index": 0}
+
+        def _tick() -> None:
+            idx = step_state["index"]
+            t = min(1.0, idx / (steps - 1))
+            setter(hex_lerp(from_hex, to_hex, t))
+            if t >= 1.0:
+                self._animation_handles.pop(key, None)
+                return
+            step_state["index"] = idx + 1
+            self._animation_handles[key] = self.window.after(interval, _tick)
+
+        if interval == 0:
+            setter(to_hex)
+            return
+        step_state["index"] = 0
+        self._animation_handles[key] = self.window.after(interval, _tick)
+
+    def _coerce_color_hex(self, value: Any, fallback: str) -> str:
+        if isinstance(value, str) and value.startswith("#") and len(value) in {4, 7}:
+            if len(value) == 4:
+                r, g, b = value[1], value[2], value[3]
+                return f"#{r}{r}{g}{g}{b}{b}".upper()
+            return value.upper()
+        return fallback.upper() if isinstance(fallback, str) else "#000000"
 
     def _on_offset_var_changed(self) -> None:
         if self._in_offset_update:
@@ -448,28 +723,53 @@ class GUIWindow:
             except Exception:
                 pass
 
+    def _status_message_text(self, is_active: bool, locked_position: Optional[Tuple[int, int]]) -> str:
+        if is_active and locked_position is not None:
+            return f"Running at {locked_position[0]}, {locked_position[1]}"
+        if is_active:
+            return "Automation running"
+        return "Automation idle"
+
+    def _update_status_pill(self, is_active: bool) -> None:
+        if self.status_pill_label is None:
+            return
+        state = "running" if is_active else "idle"
+        target_bg, target_fg = self._status_pill_colors[state]
+        current_bg = self._coerce_color_hex(self.status_pill_label.cget("background"), target_bg)
+        self.status_pill_label.configure(text="Running" if is_active else "Idle", fg=target_fg)
+        if current_bg.lower() == target_bg.lower():
+            self.status_pill_label.configure(bg=target_bg)
+            return
+        self.animate_color(
+            "status_pill",
+            current_bg,
+            target_bg,
+            240,
+            lambda color: self.status_pill_label.configure(bg=color),
+        )
+
     # Public API
     def update_status(self, is_active: bool, locked_position: Optional[Tuple[int, int]]) -> None:
-        # Thread-safe UI updates
-        def _apply():
-            if self.status_value_label is not None:
-                style = "StatusActive.TLabel" if is_active else "StatusInactive.TLabel"
-                self.status_value_label.configure(text="Active" if is_active else "Inactive", style=style)
-            if self.start_stop_button is not None:
-                if is_active:
-                    self.start_stop_button.configure(text="Stop Auto-Clicker", style="Danger.TButton")
-                else:
-                    self.start_stop_button.configure(text="Start Auto-Clicker", style="Accent.TButton")
-            if self.position_label is not None:
-                if locked_position is not None:
-                    self.position_label.configure(text=f"Position: {locked_position[0]}, {locked_position[1]}")
-                else:
-                    self.position_label.configure(text="Position: Not Locked")
+        self.post_ui_event(self._apply_status_update, is_active, locked_position)
 
-        try:
-            self.window.after(0, _apply)
-        except Exception:
-            _apply()
+    def _apply_status_update(self, is_active: bool, locked_position: Optional[Tuple[int, int]]) -> None:
+        if self.status_value_label is not None:
+            style = "StatusActive.TLabel" if is_active else "StatusInactive.TLabel"
+            self.status_value_label.configure(text="Active" if is_active else "Inactive", style=style)
+        if self.start_stop_button is not None:
+            if is_active:
+                self.start_stop_button.configure(text="Stop Auto-Clicker", style="Danger.TButton")
+            else:
+                self.start_stop_button.configure(text="Start Auto-Clicker", style="Primary.TButton")
+        if self.position_label is not None:
+            if locked_position is not None:
+                self.position_label.configure(text=f"Position: {locked_position[0]}, {locked_position[1]}")
+            else:
+                self.position_label.configure(text="Position: Not Locked")
+        if self.status_message_label is not None:
+            self.status_message_label.configure(text=self._status_message_text(is_active, locked_position))
+        self._update_status_pill(is_active)
+        self._is_running = is_active
 
     def minimize_to_indicator(self) -> None:
         try:
@@ -490,6 +790,7 @@ class GUIWindow:
         Handle window close button click.
         This is called when user clicks the X button on the window.
         """
+        self._stop_ui_event_pump()
         try:
             # Add diagnostic log
             import src.config as cfg
