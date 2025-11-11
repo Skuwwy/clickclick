@@ -11,3 +11,25 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 memori.py
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+!clickclick.spec
+
+# Application-specific
+settings.json
+
+# Built executables (don't commit, upload to GitHub releases)
+*.exe
+ClickClick.exe
+
+# Icon (optional - you can commit custom icons)
+icon.ico
+create_icon.py
+
+clickclick.spec
+requirements-dev.txt
+build.bat
+build.md

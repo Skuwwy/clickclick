@@ -1,7 +1,22 @@
 # ClickClick 🖱️⚡
 Automated mouse clicker with a simple GUI, global hotkeys, and precise scheduling.
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](requirements.txt) [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](requirements.txt)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](requirements.txt) [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](requirements.txt) [![Download](https://img.shields.io/badge/Download-Executable-brightgreen)](#download-executable)
+
+---
+
+## Download Executable
+
+**For Windows users who don't want to install Python:**
+
+📦 [Download ClickClick.exe from Releases](../../releases/latest)
+
+- ✅ **Single-file executable** - no installation required
+- ✅ **Portable** - run from anywhere (USB drive, Desktop, etc.)
+- ✅ **No Python needed** - includes everything bundled inside
+- ✅ **Just double-click to run** - it's that simple!
+
+**File size:** ~15-20 MB (includes Python runtime + all dependencies)
 
 ---
 
@@ -36,16 +51,25 @@ Core components:
 ---
 
 ## Installation
+
+### Option 1: Download Executable (Windows - No Python Required)
+
+1. Go to the [Releases page](../../releases/latest)
+2. Download `ClickClick.exe`
+3. Double-click to run - that's it! 🎉
+
+### Option 2: Run from Source (All Platforms)
+
 Use a virtual environment (recommended) and install dependencies.
 
-Windows (cmd):
+**Windows (cmd):**
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-macOS/Linux (bash):
+**macOS/Linux (bash):**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -55,19 +79,28 @@ pip install -r requirements.txt
 ---
 
 ## Quickstart
+
+### Using the Executable
+1. Download and double-click `ClickClick.exe`
+2. Configure click interval and behavior in the GUI
+3. Use the global hotkey (Numpad 5) to start/stop automated clicking
+4. Watch the status indicator overlay to confirm the current state
+
+### Running from Source
 Run the application from the project root:
 ```bash
 python -m src.main
 ```
 
-Basic usage:
-1. Launch the app.
-2. Configure click interval and behavior in the GUI.
-3. Use the global hotkey to start/stop automated clicking.
-4. Watch the status indicator to confirm the current state.
+**Basic usage:**
+1. Launch the app
+2. Configure click interval and behavior in the GUI
+3. Use the global hotkey to start/stop automated clicking
+4. Watch the status indicator to confirm the current state
 
-Notes:
-- Default hotkeys and other options are defined in [src/config.py](src/config.py) and implemented via [src/hotkey_handler.py](src/hotkey_handler.py).
+**Notes:**
+- Default hotkeys and other options are defined in [`config.py`](src/config.py)
+- Settings are saved to `settings.json` in your project directory
 
 ---
 
@@ -108,6 +141,26 @@ clickclick/
 │  └─ test_mouse_controller.py
 └─ requirements.txt
 ```
+
+---
+
+## Building Executable
+
+Want to build your own executable? See [BUILD.md](BUILD.md) for detailed instructions.
+
+**Quick build:**
+```bash
+pip install -r requirements-dev.txt
+build.bat
+```
+
+This creates a portable `ClickClick.exe` file you can distribute.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
