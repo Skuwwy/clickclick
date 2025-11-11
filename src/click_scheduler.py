@@ -9,7 +9,7 @@ executes clicks at randomized intervals for natural behavior simulation.
 import threading
 import time
 import random
-from typing import Optional
+from typing import Callable, Optional
 
 # Import configuration constants
 from .config import MIN_CLICK_DELAY, MAX_CLICK_DELAY, CONSOLE_OUTPUT_ENABLED
@@ -36,7 +36,11 @@ class ClickScheduler:
     TODO: Ensure thread-safe access to is_active flag
     """
 
-    def __init__(self, mouse_controller: MouseController) -> None:
+    def __init__(
+        self,
+        mouse_controller: MouseController,
+        next_delay_callback: Optional[Callable[[Optional[float]], None]] = None,
+    ) -> None:
         """
         Initialize the click scheduler.
         
@@ -53,6 +57,7 @@ class ClickScheduler:
         # Runtime-adjustable delay bounds
         self._min_delay: float = float(MIN_CLICK_DELAY)
         self._max_delay: float = float(MAX_CLICK_DELAY)
+        self._next_delay_callback: Optional[Callable[[Optional[float]], None]] = next_delay_callback
         
         if CONSOLE_OUTPUT_ENABLED:
             print("ClickScheduler initialized")
@@ -127,6 +132,7 @@ class ClickScheduler:
 
         if CONSOLE_OUTPUT_ENABLED:
             print("Click scheduler stopped")
+        self._notify_next_delay(None)
 
     def _clicking_loop(self) -> None:
         """
@@ -153,6 +159,7 @@ class ClickScheduler:
                     mn = float(self._min_delay)
                     mx = float(self._max_delay)
                 delay = random.uniform(mn, mx)
+                self._notify_next_delay(delay)
                 time.sleep(delay)
 
                 # Double-check active state before clicking
@@ -167,6 +174,20 @@ class ClickScheduler:
                 if CONSOLE_OUTPUT_ENABLED:
                     print(f"Click execution error: {e}")
                 continue
+
+        self._notify_next_delay(None)
+
+    def set_next_delay_callback(self, callback: Optional[Callable[[Optional[float]], None]]) -> None:
+        self._next_delay_callback = callback
+
+    def _notify_next_delay(self, remaining: Optional[float]) -> None:
+        callback = self._next_delay_callback
+        if callback is None:
+            return
+        try:
+            callback(remaining)
+        except Exception:
+            pass
 
     def get_status(self) -> dict:
         """

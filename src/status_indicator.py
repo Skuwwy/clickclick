@@ -7,6 +7,7 @@ appears as a small overlay in a screen corner and changes color
 based on whether the auto-clicker is active or inactive.
 """
 
+import time
 import tkinter as tk
 from typing import Optional, Tuple, Callable
 
@@ -48,7 +49,12 @@ class StatusIndicator:
         self.root: Optional[tk.Tk] = tk.Tk()
         self.canvas: Optional[tk.Canvas] = None
         self.circle_id: Optional[int] = None
+        self.arc_id: Optional[int] = None
         self._on_click_cb = on_click
+        self._countdown_target_ts: Optional[float] = None
+        self._countdown_total_interval: Optional[float] = None
+        self._countdown_after: Optional[str] = None
+        self._is_active: bool = False
 
         # Configure window and create the indicator
         self._setup_window()
@@ -60,6 +66,7 @@ class StatusIndicator:
         Change the indicator to active state (green color).
         Uses tkinter's after to be thread-safe if invoked from non-GUI threads.
         """
+        self._is_active = True
         if self.root is not None and self.canvas is not None and self.circle_id is not None:
             self.root.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_ACTIVE))
 
@@ -68,8 +75,25 @@ class StatusIndicator:
         Change the indicator to inactive state (red color).
         Uses tkinter's after to be thread-safe if invoked from non-GUI threads.
         """
+        self._is_active = False
+        self.set_countdown_eta(None)
         if self.root is not None and self.canvas is not None and self.circle_id is not None:
             self.root.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill=INDICATOR_COLOR_INACTIVE))
+
+    def set_countdown_eta(self, seconds: Optional[float]) -> None:
+        """
+        Update the countdown overlay to represent the remaining time until the next click.
+        """
+        if self.root is None:
+            return
+
+        def _apply() -> None:
+            self._apply_countdown_eta(seconds)
+
+        try:
+            self.root.after(0, _apply)
+        except Exception:
+            _apply()
 
     def destroy(self) -> None:
         """
@@ -84,9 +108,16 @@ class StatusIndicator:
                 pass
             finally:
                 # Reset references
+                if self._countdown_after is not None:
+                    try:
+                        self.root.after_cancel(self._countdown_after)
+                    except Exception:
+                        pass
+                self._countdown_after = None
                 self.root = None
                 self.canvas = None
                 self.circle_id = None
+                self.arc_id = None
 
     def _bind_click(self) -> None:
         """
@@ -225,6 +256,66 @@ class StatusIndicator:
             fill=INDICATOR_COLOR_INACTIVE,
             outline=''
         )
+
+        arc_margin = 2
+        self.arc_id = self.canvas.create_arc(
+            arc_margin,
+            arc_margin,
+            INDICATOR_SIZE - arc_margin,
+            INDICATOR_SIZE - arc_margin,
+            start=90,
+            extent=0,
+            style="arc",
+            outline="#F9FAFB",
+            width=3,
+            state="hidden",
+        )
+
+    def _apply_countdown_eta(self, seconds: Optional[float]) -> None:
+        if seconds is None or seconds <= 0 or not self._is_active:
+            self._countdown_target_ts = None
+            self._countdown_total_interval = None
+            self._update_countdown_arc()
+            return
+        self._countdown_target_ts = time.monotonic() + float(seconds)
+        self._countdown_total_interval = float(seconds)
+        self._update_countdown_arc()
+        self._ensure_countdown_loop()
+
+    def _ensure_countdown_loop(self) -> None:
+        if self.root is None or self._countdown_after is not None:
+            return
+
+        def _tick() -> None:
+            self._countdown_after = None
+            self._update_countdown_arc()
+            if self._countdown_target_ts is not None:
+                self._ensure_countdown_loop()
+
+        self._countdown_after = self.root.after(120, _tick)
+
+    def _update_countdown_arc(self) -> None:
+        if self.canvas is None or self.arc_id is None:
+            return
+        if (
+            not self._is_active
+            or self._countdown_target_ts is None
+            or self._countdown_total_interval is None
+            or self._countdown_total_interval <= 0
+        ):
+            self.canvas.itemconfigure(self.arc_id, state="hidden", extent=0)
+            return
+
+        remaining = max(0.0, self._countdown_target_ts - time.monotonic())
+        if remaining <= 0:
+            self.canvas.itemconfigure(self.arc_id, state="hidden", extent=0)
+            self._countdown_target_ts = None
+            self._countdown_total_interval = None
+            return
+
+        fraction = max(0.0, min(1.0, remaining / self._countdown_total_interval))
+        extent = -360 * fraction  # clockwise
+        self.canvas.itemconfigure(self.arc_id, state="normal", extent=extent)
         
     # TODO: Add additional methods for future features:
     # - Multiple indicator support (multi-monitor)

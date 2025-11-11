@@ -60,6 +60,7 @@ class ClickClickApp:
         # Initialize application components
         self.mouse_controller = MouseController()
         self.click_scheduler = ClickScheduler(self.mouse_controller)
+        self.click_scheduler.set_next_delay_callback(self._handle_next_delay)
         # Status indicator overlay with restore callback
         self.status_indicator = StatusIndicator(on_click=self._restore_main_window)
         self.hotkey_handler = HotkeyHandler(self.toggle_clicking)
@@ -135,6 +136,7 @@ class ClickClickApp:
             except Exception:
                 pass
             self.is_active = False
+            self._handle_next_delay(None)
 
     def run(self) -> None:
         """
@@ -166,6 +168,14 @@ class ClickClickApp:
             if CONSOLE_OUTPUT_ENABLED:
                 print(f"Application error: {e}")
             self.cleanup()
+
+    def _handle_next_delay(self, seconds: Optional[float]) -> None:
+        try:
+            self.gui.update_next_click_eta(seconds)
+            if hasattr(self, "status_indicator") and hasattr(self.status_indicator, "set_countdown_eta"):
+                self.status_indicator.set_countdown_eta(seconds)
+        except Exception:
+            pass
 
     def cleanup(self) -> None:
         """
@@ -293,6 +303,8 @@ class ClickClickApp:
         """
         try:
             self.mouse_controller.set_offset_range(rng)
+            if hasattr(self, "gui") and hasattr(self.gui, "reflect_offset_range"):
+                self.gui.reflect_offset_range(rng)
         except Exception:
             pass
 
