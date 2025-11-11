@@ -1,153 +1,115 @@
-# ClickClick - Python Autoclicker
+# ClickClick 🖱️⚡
+Automated mouse clicker with a simple GUI, global hotkeys, and precise scheduling.
 
-A minimal, cross-platform Python desktop application for automated mouse clicking with realistic human-like behavior simulation and visual status indication.
-
-## 📋 Project Overview
-
-ClickClick is a lightweight autoclicker tool designed to automate repetitive clicking tasks while simulating natural human clicking patterns. The application features a minimal GUI overlay that provides visual feedback on the clicking status, making it easy to know when the autoclicker is active.
-
-## ✨ Core Features (MVP)
-
-- **Hotkey Toggle Control**: Press **Numpad 5** (customizable) to start/stop the autoclicker
-- **Visual Status Indicator**: Small circular overlay (30x30px) in screen corner
-  - 🔴 Red = Stopped/Inactive
-  - 🟢 Green = Running/Active
-- **Position Locking**: Captures and locks onto mouse position when activated
-- **Randomized Click Timing**: Random delays between 1-3 seconds to simulate human behavior
-- **Position Randomization**: Small random offsets (±3 pixels on X and Y axis) for natural variation
-- **Left-Click Only**: Performs standard left mouse button clicks
-- **Silent Operation**: Graceful error handling with no intrusive error messages
-- **Cross-Platform Support**: Works on Windows, macOS, and Linux
-
-## 🛠️ Technology Stack
-
-**Core Libraries:**
-- **PyAutoGUI** - Mouse control and clicking operations
-- **pynput** - Keyboard hotkey listening and event handling
-- **tkinter** (built-in) - Minimal GUI overlay for status indicator
-- **random** (built-in) - Randomization logic for delays and offsets
-
-**Python Version:**
-- Python 3.8 or higher
-
-## 💻 System Requirements
-
-- **Operating Systems**: Windows 10/11, macOS 10.14+, or Linux (Ubuntu 18.04+)
-- **Python**: 3.8 or higher
-- **RAM**: 50 MB minimum
-- **Display**: Any resolution (indicator will position in screen corner)
-- **Permissions**: 
-  - Windows: No special permissions required
-  - macOS: Accessibility permissions for keyboard/mouse control
-  - Linux: X11 or Wayland display server
-
-## 📦 Installation Instructions
-
-*Installation instructions will be provided after implementation.*
-
-Basic steps will include:
-1. Clone or download the repository
-2. Install Python 3.8+ if not already installed
-3. Install required dependencies via pip: `pip install -r requirements.txt`
-4. Run the application: `python src/main.py`
-
-## 🚀 Usage Instructions
-
-*Detailed usage instructions will be provided after implementation.*
-
-Basic usage workflow:
-1. Run the application - a small red circular indicator will appear in the corner of your screen
-2. Position your mouse cursor at the desired click location
-3. Press **Numpad 5** to activate - the indicator turns green and the position is locked
-4. The application will automatically click at the locked position with randomized timing and small offsets
-5. Press **Numpad 5** again to stop - the indicator turns red
-6. Press **Ctrl+C** in the terminal or close the indicator window to exit completely
-
-## ⚙️ Configuration
-
-The application includes customizable settings in [`config.py`](src/config.py):
-
-- **Hotkey**: Default is Numpad 5, easily changeable
-- **Click Delay Range**: Default 1-3 seconds
-- **Position Offset Range**: Default ±3 pixels
-- **Indicator Size**: Default 30x30 pixels
-- **Indicator Position**: Corner placement (configurable)
-
-## 🏗️ Architecture
-
-For detailed technical architecture, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
-
-Key architectural components:
-- Modular design with separated concerns
-- Event-driven hotkey system
-- Thread-safe state management
-- Minimal GUI overlay with tkinter
-- Cross-platform compatibility layer
-
-## 🔮 Future Extensibility
-
-This MVP is designed with modularity in mind to support future enhancements:
-
-### Planned Features (Post-MVP)
-- **Enhanced GUI**: Full settings window with controls
-- **Multiple Click Types**: Right-click, double-click, middle-click support
-- **Click Profiles**: Save/load different configuration profiles
-- **Multiple Hotkeys**: Different hotkeys for different click types
-- **Click Patterns**: Sequential clicking at multiple positions
-- **Recording Mode**: Record and playback click sequences
-- **Advanced Randomization**: Configurable randomization algorithms
-- **Statistics**: Track clicks, uptime, and usage patterns
-- **Hotkey Customization UI**: In-app hotkey configuration
-- **Portable Executable**: Standalone .exe for Windows
-
-### Extension Points
-- **Plugin System**: For custom click behaviors
-- **API Interface**: For programmatic control
-- **Scripting Support**: For complex automation scenarios
-- **Multi-monitor Support**: Position indicators per monitor
-
-## 📝 Project Structure
-
-```
-clickclick/
-├── README.md                 # This file
-├── ARCHITECTURE.md          # Technical architecture documentation
-├── requirements.txt         # Python dependencies
-├── src/
-│   ├── __init__.py
-│   ├── main.py             # Application entry point
-│   ├── config.py           # Configuration constants
-│   ├── hotkey_handler.py   # Hotkey listening logic
-│   ├── mouse_controller.py # Mouse click operations
-│   ├── click_scheduler.py  # Click timing and coordination
-│   └── status_indicator.py # GUI status overlay
-└── tests/
-    └── (future test files)
-```
-
-## 🤝 Contributing
-
-*Contribution guidelines will be added after MVP completion.*
-
-## 📄 License
-
-*License information will be added.*
-
-## ⚠️ Disclaimer
-
-This tool is intended for legitimate automation tasks. Users are responsible for ensuring compliance with the terms of service of any applications or games where this tool is used. Misuse of automation tools may violate terms of service or applicable laws.
-
-## 🐛 Known Limitations (MVP)
-
-- Single click position per session
-- Console must remain open during operation
-- No click history or logging
-- Limited error feedback (silent failures)
-
-These limitations are intentional for the MVP and will be addressed in future releases.
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](requirements.txt) [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](requirements.txt)
 
 ---
 
-**Version**: 1.0.0-MVP  
-**Status**: Architecture Phase  
-**Last Updated**: 2025-11-10
+## What is ClickClick?
+ClickClick is a lightweight Python application that automates mouse clicks. It provides a friendly GUI, hotkey controls to start/stop, configurable intervals, and a clear status indicator so you can automate repetitive click tasks safely and efficiently.
+
+Core components:
+- GUI: [src/gui_window.py](src/gui_window.py)
+- Hotkeys: [src/hotkey_handler.py](src/hotkey_handler.py)
+- Mouse automation: [src/mouse_controller.py](src/mouse_controller.py)
+- Scheduling: [src/click_scheduler.py](src/click_scheduler.py)
+- Status indicator: [src/status_indicator.py](src/status_indicator.py)
+- Configuration: [src/config.py](src/config.py)
+
+---
+
+## Features
+- Intuitive GUI to configure click behavior and intervals
+- Global hotkeys to quickly start/stop automation
+- Precise scheduling for consistent timing
+- Visual status indicator for real-time feedback
+- Test coverage for core mouse automation ([tests/test_mouse_controller.py](tests/test_mouse_controller.py))
+
+---
+
+## Prerequisites
+- Python 3.8 or newer
+- OS: Windows, Linux, or macOS
+- Project dependencies listed in [requirements.txt](requirements.txt)
+- On macOS and some Linux environments, you may need accessibility/input permissions for global hotkeys and mouse control
+
+---
+
+## Installation
+Use a virtual environment (recommended) and install dependencies.
+
+Windows (cmd):
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+macOS/Linux (bash):
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+---
+
+## Quickstart
+Run the application from the project root:
+```bash
+python -m src.main
+```
+
+Basic usage:
+1. Launch the app.
+2. Configure click interval and behavior in the GUI.
+3. Use the global hotkey to start/stop automated clicking.
+4. Watch the status indicator to confirm the current state.
+
+Notes:
+- Default hotkeys and other options are defined in [src/config.py](src/config.py) and implemented via [src/hotkey_handler.py](src/hotkey_handler.py).
+
+---
+
+## Configuration
+Adjust defaults in [src/config.py](src/config.py). Typical options include:
+- Click interval and scheduling
+- Hotkey bindings
+- Click type and behavior
+
+---
+
+## Testing
+Run the test suite with pytest:
+```bash
+pytest
+```
+Example targeted run:
+```bash
+pytest tests/test_mouse_controller.py
+```
+
+---
+
+## Project Structure
+```
+clickclick/
+├─ src/
+│  ├─ __init__.py
+│  ├─ main.py              # Entry point
+│  ├─ gui_window.py        # GUI interface
+│  ├─ hotkey_handler.py    # Hotkey management
+│  ├─ mouse_controller.py  # Mouse automation
+│  ├─ click_scheduler.py   # Timing and scheduling
+│  ├─ status_indicator.py  # Visual feedback
+│  └─ config.py            # Configuration
+├─ tests/
+│  ├─ conftest.py
+│  └─ test_mouse_controller.py
+└─ requirements.txt
+```
+
+---
+
+## License
+Not detected. Consider adding a LICENSE file to clarify usage and distribution.
