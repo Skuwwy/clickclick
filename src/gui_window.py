@@ -128,42 +128,39 @@ class GUIWindow:
             pass
 
         self.window.configure(bg=base_bg)
-        font_family = "Segoe UI"
-        try:
-            available_families = set(tkfont.families(self.window))
-        except tk.TclError:
-            available_families = set()
 
-        if font_family not in available_families:
-            try:
-                font_family = tkfont.nametofont("TkDefaultFont").cget("family")
-            except tk.TclError:
-                font_family = "TkDefaultFont"
-
+        self._base_font_family = self._resolve_font_family()
+        default_font_spec = self._format_font(self._base_font_family, 10)
         try:
-            self.window.option_add("*Font", f"{{{font_family}}} 10")
+            self.window.option_add("*Font", default_font_spec)
         except tk.TclError:
             pass
+
+        heading_font = (self._base_font_family, 16, "bold")
+        subheading_font = (self._base_font_family, 12, "bold")
+        body_font = (self._base_font_family, 10)
+        strong_font = (self._base_font_family, 11)
+        meta_font = (self._base_font_family, 9)
 
         self.style.configure("Main.TFrame", background=base_bg)
         self.style.configure("Card.TFrame", background=card_bg, relief="flat", borderwidth=0)
         self.style.configure("CardBody.TFrame", background=card_bg)
-        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=(font_family, 12, "bold"))
-        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=(font_family, 16, "bold"))
-        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=(font_family, 10))
-        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=(font_family, 10))
-        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=(font_family, 10))
-        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=(font_family, 11))
-        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=(font_family, 9))
-        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=(font_family, 9))
-        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=(font_family, 11, "bold"))
-        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=(font_family, 11, "bold"))
+        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=subheading_font)
+        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=heading_font)
+        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=body_font)
+        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=body_font)
+        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=body_font)
+        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=strong_font)
+        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=meta_font)
+        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=meta_font)
+        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=(self._base_font_family, 11, "bold"))
+        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=(self._base_font_family, 11, "bold"))
 
         self.style.configure(
             "Accent.TButton",
             background=accent,
             foreground="#F9FAFB",
-            font=(font_family, 10, "bold"),
+            font=(self._base_font_family, 10, "bold"),
             padding=(16, 10),
         )
         self.style.map(
@@ -175,7 +172,7 @@ class GUIWindow:
             "Danger.TButton",
             background=danger,
             foreground="#F9FAFB",
-            font=(font_family, 10, "bold"),
+            font=(self._base_font_family, 10, "bold"),
             padding=(16, 10),
         )
         self.style.map(
@@ -187,7 +184,7 @@ class GUIWindow:
             "Secondary.TButton",
             background=secondary_bg,
             foreground="#E5E7EB",
-            font=(font_family, 10),
+            font=(self._base_font_family, 10),
             padding=(16, 10),
         )
         self.style.map(
@@ -196,7 +193,7 @@ class GUIWindow:
             foreground=[("disabled", "#6B7280")],
         )
 
-        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=(font_family, 10))
+        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=(self._base_font_family, 10))
         self.style.map("Toggle.TCheckbutton", foreground=[("disabled", "#6B7280")])
         self.style.configure(
             "Input.Spinbox",
@@ -217,6 +214,43 @@ class GUIWindow:
         body = ttk.Frame(card, style="CardBody.TFrame")
         body.pack(fill="x")
         return body
+
+    def _resolve_font_family(self) -> str:
+        """Return a GUI font family that exists on the host system."""
+
+        preferred_families = (
+            "Segoe UI Variable Text",
+            "Segoe UI",
+            "SF Pro Text",
+            "Helvetica Neue",
+            "Helvetica",
+            "Arial",
+        )
+        try:
+            available_families = {family.lower(): family for family in tkfont.families(self.window)}
+        except tk.TclError:
+            available_families = {}
+
+        for family in preferred_families:
+            key = family.lower()
+            if key in available_families:
+                return available_families[key]
+
+        try:
+            return tkfont.nametofont("TkDefaultFont").cget("family")
+        except tk.TclError:
+            return "TkDefaultFont"
+
+    @staticmethod
+    def _format_font(family: str, size: int, weight: Optional[str] = None) -> str:
+        """Create a Tk font string with braces around multi-word names."""
+
+        if " " in family:
+            family = f"{{{family}}}"
+        parts = [family, str(size)]
+        if weight:
+            parts.append(weight)
+        return " ".join(parts)
 
     def _build_layout(self) -> None:
         root = self.window
