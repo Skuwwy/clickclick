@@ -19,6 +19,7 @@ import json
 import os
 import threading
 import tkinter as tk
+from tkinter import ttk
 from typing import Optional, Tuple
 
 try:
@@ -53,7 +54,8 @@ class GUIWindow:
         # Basic window configuration
         self.window.title("ClickClick Auto-Clicker")
         try:
-            self.window.geometry("400x600")
+            self.window.geometry("420x560")
+            self.window.minsize(420, 520)
         except Exception:
             pass
         try:
@@ -61,14 +63,20 @@ class GUIWindow:
         except Exception:
             pass
 
-        # Widgets
-        self.status_value_label: Optional[tk.Label] = None
-        self.position_label: Optional[tk.Label] = None
-        self.start_stop_button: Optional[tk.Button] = None
+        # Widgets and style references (assigned during layout build)
+        self.style: Optional[ttk.Style] = None
+        self.status_value_label: Optional[ttk.Label] = None
+        self.position_label: Optional[ttk.Label] = None
+        self.start_stop_button: Optional[ttk.Button] = None
+        self.apply_timing_button: Optional[ttk.Button] = None
+        self.timing_error_label: Optional[ttk.Label] = None
+        self.applied_delay_label: Optional[ttk.Label] = None
+        self._offset_display_label: Optional[ttk.Label] = None
+        self._offset_scale: Optional[ttk.Scale] = None
+        self._in_offset_update = False
+
         self.min_delay_var = tk.IntVar(value=1)
         self.max_delay_var = tk.IntVar(value=3)
-        self.timing_error_label: Optional[tk.Label] = None
-        self.applied_delay_label: Optional[tk.Label] = None
         self._timing_inputs_valid: bool = True
         self.offset_range_var = tk.IntVar(value=3)
         self.always_on_top_var = tk.BooleanVar(value=False)
@@ -86,8 +94,11 @@ class GUIWindow:
         except Exception:
             pass
 
+        self._apply_theme()
         self._build_layout()
         self._bind_behaviors()
+        self._validate_timing_inputs()
+        self._on_offset_var_changed()
 
         # Load settings after widgets exist
         self.load_settings()
@@ -101,134 +112,348 @@ class GUIWindow:
         self._apply_hotkey_to_handler()
 
     # Layout construction
+    def _apply_theme(self) -> None:
+        base_bg = "#0f172a"
+        card_bg = "#111827"
+        accent = "#2563EB"
+        danger = "#DC2626"
+        secondary_bg = "#1f2937"
+        highlight = "#60A5FA"
+
+        self.style = ttk.Style(self.window)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.window.configure(bg=base_bg)
+        try:
+            self.window.option_add("*Font", "Segoe UI 10")
+        except tk.TclError:
+            pass
+
+        self.style.configure("Main.TFrame", background=base_bg)
+        self.style.configure("Card.TFrame", background=card_bg, relief="flat", borderwidth=0)
+        self.style.configure("CardBody.TFrame", background=card_bg)
+        self.style.configure("CardHeading.TLabel", background=card_bg, foreground="#F9FAFB", font=("Segoe UI", 12, "bold"))
+        self.style.configure("Header.TLabel", background=base_bg, foreground="#F9FAFB", font=("Segoe UI", 16, "bold"))
+        self.style.configure("Subtitle.TLabel", background=base_bg, foreground="#9CA3AF", font=("Segoe UI", 10))
+        self.style.configure("Body.TLabel", background=card_bg, foreground="#E5E7EB", font=("Segoe UI", 10))
+        self.style.configure("BodyMuted.TLabel", background=card_bg, foreground="#9CA3AF", font=("Segoe UI", 10))
+        self.style.configure("BodyStrong.TLabel", background=card_bg, foreground="#F3F4F6", font=("Segoe UI", 11))
+        self.style.configure("Meta.TLabel", background=card_bg, foreground=highlight, font=("Segoe UI", 9))
+        self.style.configure("Error.TLabel", background=card_bg, foreground="#F87171", font=("Segoe UI", 9))
+        self.style.configure("StatusActive.TLabel", background=card_bg, foreground="#34D399", font=("Segoe UI", 11, "bold"))
+        self.style.configure("StatusInactive.TLabel", background=card_bg, foreground="#F87171", font=("Segoe UI", 11, "bold"))
+
+        self.style.configure(
+            "Accent.TButton",
+            background=accent,
+            foreground="#F9FAFB",
+            font=("Segoe UI", 10, "bold"),
+            padding=(16, 10),
+        )
+        self.style.map(
+            "Accent.TButton",
+            background=[("active", "#1D4ED8"), ("pressed", "#1E40AF")],
+            foreground=[("disabled", "#9CA3AF")],
+        )
+        self.style.configure(
+            "Danger.TButton",
+            background=danger,
+            foreground="#F9FAFB",
+            font=("Segoe UI", 10, "bold"),
+            padding=(16, 10),
+        )
+        self.style.map(
+            "Danger.TButton",
+            background=[("active", "#B91C1C"), ("pressed", "#7F1D1D")],
+            foreground=[("disabled", "#FECACA")],
+        )
+        self.style.configure(
+            "Secondary.TButton",
+            background=secondary_bg,
+            foreground="#E5E7EB",
+            font=("Segoe UI", 10),
+            padding=(16, 10),
+        )
+        self.style.map(
+            "Secondary.TButton",
+            background=[("active", "#374151"), ("pressed", "#1f2937")],
+            foreground=[("disabled", "#6B7280")],
+        )
+
+        self.style.configure("Toggle.TCheckbutton", background=card_bg, foreground="#E5E7EB", font=("Segoe UI", 10))
+        self.style.map("Toggle.TCheckbutton", foreground=[("disabled", "#6B7280")])
+        self.style.configure(
+            "Input.Spinbox",
+            background=card_bg,
+            foreground="#F9FAFB",
+            fieldbackground="#1f2937",
+            arrowsize=12,
+        )
+        self.style.configure("TSeparator", background="#1f2937")
+
+    def _create_card(self, parent: ttk.Frame, title: str) -> ttk.Frame:
+        card = ttk.Frame(parent, style="Card.TFrame", padding=(16, 18))
+        card.pack(fill="x", pady=(0, 16))
+
+        ttk.Label(card, text=title, style="CardHeading.TLabel").pack(anchor="w")
+        ttk.Separator(card).pack(fill="x", pady=(10, 14))
+
+        body = ttk.Frame(card, style="CardBody.TFrame")
+        body.pack(fill="x")
+        return body
+
     def _build_layout(self) -> None:
         root = self.window
 
+        container = ttk.Frame(root, style="Main.TFrame", padding=24)
+        container.pack(fill="both", expand=True)
+
+        ttk.Label(container, text="ClickClick Auto-Clicker", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            container,
+            text="Configure timing, offsets and automation hotkeys.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(4, 22))
+
         # Status Section
-        status_frame = tk.LabelFrame(root, text="Status Section")
-        status_frame.pack(fill="x", padx=10, pady=10)
+        status_body = self._create_card(container, "Live Status")
+        status_body.columnconfigure(0, weight=1)
+        status_body.columnconfigure(1, weight=1)
 
-        tk.Label(status_frame, text="Status:").grid(row=0, column=0, sticky="w")
-        self.status_value_label = tk.Label(status_frame, text="Inactive", fg="red")
-        self.status_value_label.grid(row=0, column=1, sticky="w")
+        ttk.Label(status_body, text="Status", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        self.status_value_label = ttk.Label(status_body, text="Inactive", style="StatusInactive.TLabel")
+        self.status_value_label.grid(row=0, column=1, sticky="e")
 
-        self.position_label = tk.Label(status_frame, text="Position: Not Locked")
-        self.position_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 10))
+        self.position_label = ttk.Label(status_body, text="Position: Not Locked", style="BodyStrong.TLabel")
+        self.position_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        self.start_stop_button = tk.Button(
-            status_frame,
+        self.start_stop_button = ttk.Button(
+            status_body,
             text="Start Auto-Clicker",
             command=self._on_toggle_clicked,
-            width=30,
-            height=2,
-            bg="#4CAF50",
-            fg="white",
+            style="Accent.TButton",
         )
-        self.start_stop_button.grid(row=2, column=0, columnspan=2, pady=5)
+        self.start_stop_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(18, 0))
 
         # Click Timing Settings
-        timing_frame = tk.LabelFrame(root, text="Click Timing Settings")
-        timing_frame.pack(fill="x", padx=10, pady=10)
+        timing_body = self._create_card(container, "Click Timing")
+        timing_body.columnconfigure(0, weight=1)
+        timing_body.columnconfigure(1, weight=1)
+        timing_body.columnconfigure(2, weight=1)
 
-        tk.Label(timing_frame, text="Min Delay (sec):").grid(row=0, column=0, sticky="w")
-        min_spin = tk.Spinbox(
-            timing_frame,
+        ttk.Label(timing_body, text="Min Delay (sec)", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        min_spin = ttk.Spinbox(
+            timing_body,
             from_=1,
             to=50,
             increment=1,
             textvariable=self.min_delay_var,
             width=6,
+            justify="center",
+            style="Input.Spinbox",
         )
-        min_spin.grid(row=0, column=1, sticky="w")
+        min_spin.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-        tk.Label(timing_frame, text="Max Delay (sec):").grid(row=1, column=0, sticky="w")
-        max_spin = tk.Spinbox(
-            timing_frame,
+        ttk.Label(timing_body, text="Max Delay (sec)", style="BodyMuted.TLabel").grid(row=1, column=0, sticky="w", pady=(12, 0))
+        max_spin = ttk.Spinbox(
+            timing_body,
             from_=1,
             to=50,
             increment=1,
             textvariable=self.max_delay_var,
             width=6,
+            justify="center",
+            style="Input.Spinbox",
         )
-        max_spin.grid(row=1, column=1, sticky="w")
+        max_spin.grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(12, 0))
 
-        # Apply button to confirm timing changes
-        tk.Button(timing_frame, text="Apply", command=self._apply_delay_settings, width=8).grid(row=0, column=2, rowspan=2, padx=(10,0))
+        self.apply_timing_button = ttk.Button(
+            timing_body,
+            text="Apply Timing",
+            command=self._apply_delay_settings,
+            style="Accent.TButton",
+        )
+        self.apply_timing_button.grid(row=0, column=2, rowspan=2, sticky="ew", padx=(18, 0))
 
-        # Inline error label (appears when invalid)
-        self.timing_error_label = tk.Label(timing_frame, text="", fg="#D32F2F")
-        self.timing_error_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self.timing_error_label = ttk.Label(timing_body, text="", style="Error.TLabel")
+        self.timing_error_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(12, 0))
 
-        # Applied confirmation label
-        self.applied_delay_label = tk.Label(timing_frame, text="Applied: Min 1s, Max 3s", fg="#607D8B")
-        self.applied_delay_label.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
-
-        # Apply button to confirm timing changes
-        tk.Button(timing_frame, text="✔ Apply", command=self._apply_delay_settings, width=8).grid(row=0, column=2, rowspan=2, padx=(10,0))
+        self.applied_delay_label = ttk.Label(timing_body, text="Applied: Min 1s, Max 3s", style="Meta.TLabel")
+        self.applied_delay_label.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         # Position Offset Settings
-        offset_frame = tk.LabelFrame(root, text="Position Offset Settings")
-        offset_frame.pack(fill="x", padx=10, pady=10)
+        offset_body = self._create_card(container, "Position Offset")
+        offset_body.columnconfigure(0, weight=1)
+        offset_body.columnconfigure(1, weight=1)
 
-        tk.Label(offset_frame, text="Offset Range (±px):").grid(row=0, column=0, sticky="w")
-        offset_spin = tk.Spinbox(
-            offset_frame,
+        ttk.Label(offset_body, text="Randomize each click within:", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        self._offset_display_label = ttk.Label(offset_body, text="±3 px", style="BodyStrong.TLabel")
+        self._offset_display_label.grid(row=0, column=1, sticky="e")
+
+        self._offset_scale = ttk.Scale(
+            offset_body,
+            from_=0,
+            to=50,
+            command=self._on_offset_scale_changed,
+            orient="horizontal",
+        )
+        self._offset_scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        try:
+            self._offset_scale.set(float(self.offset_range_var.get()))
+        except Exception:
+            pass
+
+        ttk.Spinbox(
+            offset_body,
             from_=0,
             to=50,
             increment=1,
             textvariable=self.offset_range_var,
             width=6,
-            command=self._apply_offset_settings,
+            justify="center",
+            style="Input.Spinbox",
+        ).grid(row=2, column=0, sticky="w", pady=(14, 0))
+        ttk.Label(offset_body, text="Use the arrows or slider for fine control.", style="Meta.TLabel").grid(
+            row=2, column=1, sticky="e", pady=(14, 0)
         )
-        offset_spin.grid(row=0, column=1, sticky="w")
 
         # Hotkey Configuration
-        hotkey_frame = tk.LabelFrame(root, text="Hotkey Configuration")
-        hotkey_frame.pack(fill="x", padx=10, pady=10)
+        hotkey_body = self._create_card(container, "Toggle Hotkey")
+        hotkey_body.columnconfigure(0, weight=1)
+        hotkey_body.columnconfigure(1, weight=1)
 
-        tk.Label(hotkey_frame, text="Toggle Hotkey:").grid(row=0, column=0, sticky="w")
-        hotkey_label = tk.Label(hotkey_frame, textvariable=self.hotkey_var)
-        hotkey_label.grid(row=0, column=1, sticky="w")
-        tk.Button(hotkey_frame, text="Capture Hotkey", command=self._capture_hotkey).grid(row=1, column=0, columnspan=2, pady=5)
+        ttk.Label(hotkey_body, text="Current Hotkey", style="BodyMuted.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(hotkey_body, textvariable=self.hotkey_var, style="BodyStrong.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        ttk.Button(hotkey_body, text="Capture New Hotkey", command=self._capture_hotkey, style="Secondary.TButton").grid(
+            row=1, column=1, sticky="e", pady=(6, 0)
+        )
+        ttk.Label(
+            hotkey_body,
+            text="Hotkeys apply immediately after capture.",
+            style="Meta.TLabel",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         # Advanced Options
-        adv_frame = tk.LabelFrame(root, text="Advanced Options")
-        adv_frame.pack(fill="x", padx=10, pady=10)
+        adv_body = self._create_card(container, "Advanced Options")
+        adv_body.columnconfigure(0, weight=1)
 
-        tk.Checkbutton(adv_frame, text="Show Status Indicator", variable=self.show_indicator_var, command=self._apply_show_indicator).grid(row=0, column=0, sticky="w")
-        tk.Checkbutton(adv_frame, text="Always On Top", variable=self.always_on_top_var, command=self._apply_always_on_top).grid(row=1, column=0, sticky="w")
-        tk.Checkbutton(adv_frame, text="Console Debug Output", variable=self.console_output_var, command=self._apply_console_output).grid(row=2, column=0, sticky="w")
+        ttk.Checkbutton(
+            adv_body,
+            text="Show Status Indicator",
+            variable=self.show_indicator_var,
+            command=self._apply_show_indicator,
+            style="Toggle.TCheckbutton",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Checkbutton(
+            adv_body,
+            text="Always On Top",
+            variable=self.always_on_top_var,
+            command=self._apply_always_on_top,
+            style="Toggle.TCheckbutton",
+        ).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Checkbutton(
+            adv_body,
+            text="Console Debug Output",
+            variable=self.console_output_var,
+            command=self._apply_console_output,
+            style="Toggle.TCheckbutton",
+        ).grid(row=2, column=0, sticky="w", pady=(8, 0))
 
         # Footer Buttons
-        footer = tk.Frame(root)
-        footer.pack(fill="x", padx=10, pady=10)
+        footer = ttk.Frame(container, style="Main.TFrame")
+        footer.pack(fill="x", pady=(6, 0))
+        footer.columnconfigure(0, weight=1)
+        footer.columnconfigure(1, weight=1)
 
-        tk.Button(footer, text="Minimize to Indicator", command=self.minimize_to_indicator).pack(side="left")
-        tk.Button(footer, text="Save", command=self.save_settings).pack(side="right")
+        ttk.Button(
+            footer,
+            text="Minimize to Indicator",
+            command=self.minimize_to_indicator,
+            style="Secondary.TButton",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Button(
+            footer,
+            text="Save Settings",
+            command=self.save_settings,
+            style="Accent.TButton",
+        ).grid(row=0, column=1, sticky="e")
 
     def _bind_behaviors(self) -> None:
-        # Update position preview when app locks/unlocks
-        # App drives updates via update_status()
         try:
-            # Only auto-apply offset; timing applies via tick button
-            self.offset_range_var.trace_add('write', lambda *args: self._apply_offset_settings())
-            # Validate timing inputs as user types
-            self.min_delay_var.trace_add('write', lambda *args: self._validate_timing_inputs())
-            self.max_delay_var.trace_add('write', lambda *args: self._validate_timing_inputs())
+            self.offset_range_var.trace_add("write", lambda *args: self._on_offset_var_changed())
+            self.min_delay_var.trace_add("write", lambda *args: self._validate_timing_inputs())
+            self.max_delay_var.trace_add("write", lambda *args: self._validate_timing_inputs())
         except Exception:
             pass
+
+    def _on_offset_var_changed(self) -> None:
+        if self._in_offset_update:
+            return
+        try:
+            value = int(self.offset_range_var.get())
+        except Exception:
+            return
+        value = max(0, min(50, value))
+        if value != self.offset_range_var.get():
+            self._in_offset_update = True
+            try:
+                self.offset_range_var.set(value)
+            finally:
+                self._in_offset_update = False
+            return
+
+        self._update_offset_display(value)
+        if self._offset_scale is not None:
+            self._in_offset_update = True
+            try:
+                self._offset_scale.set(float(value))
+            finally:
+                self._in_offset_update = False
+
+        self._apply_offset_settings(value)
+
+    def _on_offset_scale_changed(self, value: str) -> None:
+        if self._in_offset_update:
+            return
+        try:
+            numeric = int(float(value))
+        except (TypeError, ValueError):
+            return
+        numeric = max(0, min(50, numeric))
+        if numeric != self.offset_range_var.get():
+            self._in_offset_update = True
+            try:
+                self.offset_range_var.set(numeric)
+            finally:
+                self._in_offset_update = False
+        else:
+            self._update_offset_display(numeric)
+            self._apply_offset_settings(numeric)
+
+    def _update_offset_display(self, value: int) -> None:
+        if self._offset_display_label is not None:
+            try:
+                self._offset_display_label.configure(text=f"±{value} px")
+            except Exception:
+                pass
 
     # Public API
     def update_status(self, is_active: bool, locked_position: Optional[Tuple[int, int]]) -> None:
         # Thread-safe UI updates
         def _apply():
             if self.status_value_label is not None:
-                self.status_value_label.configure(text="Active" if is_active else "Inactive", fg="#00AA00" if is_active else "red")
+                style = "StatusActive.TLabel" if is_active else "StatusInactive.TLabel"
+                self.status_value_label.configure(text="Active" if is_active else "Inactive", style=style)
             if self.start_stop_button is not None:
                 if is_active:
-                    self.start_stop_button.configure(text="Stop Auto-Clicker", bg="#E53935")
+                    self.start_stop_button.configure(text="Stop Auto-Clicker", style="Danger.TButton")
                 else:
-                    self.start_stop_button.configure(text="Start Auto-Clicker", bg="#4CAF50")
+                    self.start_stop_button.configure(text="Start Auto-Clicker", style="Accent.TButton")
             if self.position_label is not None:
                 if locked_position is not None:
                     self.position_label.configure(text=f"Position: {locked_position[0]}, {locked_position[1]}")
@@ -266,7 +491,7 @@ class GUIWindow:
                 print("[DEBUG] GUI _on_close_window called - user clicked close button")
         except Exception:
             pass
-        
+
         try:
             # Call the app's close handler which triggers full cleanup
             if hasattr(self.app, '_on_close_window'):
@@ -313,8 +538,16 @@ class GUIWindow:
 
     def _validate_timing_inputs(self) -> None:
         valid, msg = self._timing_is_valid()
-        self._set_timing_error(msg if not valid else "")
         self._timing_inputs_valid = valid
+        self._set_timing_error(msg if not valid else "")
+        if self.apply_timing_button is not None:
+            try:
+                if valid:
+                    self.apply_timing_button.state(["!disabled"])
+                else:
+                    self.apply_timing_button.state(["disabled"])
+            except Exception:
+                pass
 
     def _timing_is_valid(self) -> tuple[bool, str]:
         try:
@@ -344,15 +577,22 @@ class GUIWindow:
         except Exception:
             pass
 
-    def _apply_offset_settings(self) -> None:
+    def _apply_offset_settings(self, value: Optional[int] = None) -> None:
         try:
-            rng = int(self.offset_range_var.get())
-            rng = max(0, min(50, rng))
-            self.offset_range_var.set(rng)
-            if hasattr(self.app, "update_offset_range"):
-                self.app.update_offset_range(rng)
+            rng = int(value if value is not None else self.offset_range_var.get())
         except Exception:
-            pass
+            return
+        rng = max(0, min(50, rng))
+        if value is None and rng != self.offset_range_var.get():
+            self._in_offset_update = True
+            try:
+                self.offset_range_var.set(rng)
+            finally:
+                self._in_offset_update = False
+            return
+        if hasattr(self.app, "update_offset_range"):
+            self.app.update_offset_range(rng)
+        self._update_offset_display(rng)
 
     def _apply_always_on_top(self) -> None:
         try:
