@@ -205,6 +205,13 @@ class ClickClickApp:
                 pass
 
             try:
+                root = getattr(self.status_indicator, "root", None)
+                if root is not None:
+                    try:
+                        root.quit()
+                    except Exception as e:
+                        if CONSOLE_OUTPUT_ENABLED:
+                            print(f"[DEBUG] Error while quitting Tk root: {e}")
                 self.status_indicator.destroy()
             except Exception:
                 pass
@@ -220,14 +227,7 @@ class ClickClickApp:
         finally:
             self.running = False
             if CONSOLE_OUTPUT_ENABLED:
-                print("[DEBUG] Calling sys.exit(0) to terminate process")
-            try:
-                # Ensure full process exit when cleanup requested from GUI close
-                sys.exit(0)
-            except SystemExit:
-                if CONSOLE_OUTPUT_ENABLED:
-                    print("[DEBUG] SystemExit raised - process should terminate")
-                pass
+                print("[DEBUG] cleanup() complete")
 
     def _signal_handler(self, signum, frame) -> None:
         """

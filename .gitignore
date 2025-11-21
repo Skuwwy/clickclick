@@ -33,3 +33,6 @@ clickclick.spec
 requirements-dev.txt
 build.bat
 build.md
+
+RELEASE_NOTES.md
+RELEASE_TEMPLATE.md

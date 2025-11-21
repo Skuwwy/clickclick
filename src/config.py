@@ -10,8 +10,8 @@ the application easily configurable.
 TOGGLE_HOTKEY: str = 'num_5'  # Numpad 5 key for toggling auto-clicker
 
 # Click Timing Configuration
-MIN_CLICK_DELAY: float = 1.0  # Minimum delay between clicks (seconds)
-MAX_CLICK_DELAY: float = 3.0  # Maximum delay between clicks (seconds)
+MIN_CLICK_DELAY: float = 8.0  # Minimum delay between clicks (seconds)
+MAX_CLICK_DELAY: float = 10.0  # Maximum delay between clicks (seconds)
 
 # Position Randomization Configuration
 POSITION_OFFSET_RANGE: int = 3  # ±3 pixels range for click position randomization
@@ -24,7 +24,7 @@ INDICATOR_COLOR_INACTIVE: str = '#FF0000'  # Red color for inactive state
 INDICATOR_OPACITY: float = 0.7  # Transparency level (0.0 to 1.0)
 
 # Debug Configuration
-CONSOLE_OUTPUT_ENABLED: bool = True  # Set to True for console logging during development
+CONSOLE_OUTPUT_ENABLED: bool = False  # Set to True for console logging during development
 
 # Additional Configuration Constants for Implementation
 PLACEHOLDER_DELAY: float = 0.1  # Placeholder delay for implementation (will be removed in final version)

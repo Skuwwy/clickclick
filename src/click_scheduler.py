@@ -7,7 +7,6 @@ executes clicks at randomized intervals for natural behavior simulation.
 """
 
 import threading
-import time
 import random
 from typing import Callable, Optional
 
@@ -54,6 +53,7 @@ class ClickScheduler:
         self.thread: Optional[threading.Thread] = None
         # Lock to ensure thread-safe access to is_active and state changes
         self._state_lock = threading.Lock()
+        self._stop_event = threading.Event()
         # Runtime-adjustable delay bounds
         self._min_delay: float = float(MIN_CLICK_DELAY)
         self._max_delay: float = float(MAX_CLICK_DELAY)
@@ -80,6 +80,7 @@ class ClickScheduler:
             if self.is_active:
                 raise RuntimeError("Click scheduler is already running")
             self.is_active = True
+            self._stop_event.clear()
 
         # Create and start the background thread
         self.thread = threading.Thread(
@@ -115,6 +116,7 @@ class ClickScheduler:
             if not self.is_active:
                 return
             self.is_active = False
+            self._stop_event.set()
 
         # Join the thread to wait for completion
         if self.thread is not None:
@@ -160,7 +162,9 @@ class ClickScheduler:
                     mx = float(self._max_delay)
                 delay = random.uniform(mn, mx)
                 self._notify_next_delay(delay)
-                time.sleep(delay)
+                interrupted = self._stop_event.wait(delay)
+                if interrupted:
+                    continue
 
                 # Double-check active state before clicking
                 with self._state_lock:

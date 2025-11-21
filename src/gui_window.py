@@ -42,7 +42,7 @@ SPACE_8 = 8
 SPACE_12 = 12
 SPACE_16 = 16
 MIN_DELAY_SECONDS = 0.1
-MAX_DELAY_SECONDS = 10.0
+MAX_DELAY_SECONDS = 20.0
 OFFSET_MAX_PX = 50
 
 
@@ -264,8 +264,8 @@ class GUIWindow:
         self._validation_messages: dict[str, str] = {}
         self._validation_banner_visible = False
 
-        self.min_delay_var = tk.DoubleVar(value=1.0)
-        self.max_delay_var = tk.DoubleVar(value=3.0)
+        self.min_delay_var = tk.DoubleVar(value=8.0)
+        self.max_delay_var = tk.DoubleVar(value=10.0)
         self._timing_inputs_valid: bool = True
         self.offset_range_var = tk.IntVar(value=3)
         self.always_on_top_var = tk.BooleanVar(value=False)
@@ -1041,7 +1041,7 @@ class GUIWindow:
             min_d = float(self.min_delay_var.get())
             max_d = float(self.max_delay_var.get())
         except Exception:
-            return False, "Enter numeric delays (0.1-10.0s)."
+            return False, f"Enter numeric delays ({MIN_DELAY_SECONDS:.1f}-{MAX_DELAY_SECONDS:.1f}s)."
         if min_d < MIN_DELAY_SECONDS or min_d > MAX_DELAY_SECONDS:
             return False, f"Min delay must be between {MIN_DELAY_SECONDS:.1f}s and {MAX_DELAY_SECONDS:.1f}s."
         if max_d < MIN_DELAY_SECONDS or max_d > MAX_DELAY_SECONDS:
